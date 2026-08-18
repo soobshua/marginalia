@@ -1,0 +1,797 @@
+// ==========================================
+// MARGINALIA: A Light Academia Book Platform
+// Single-File Next.js/React Production Code
+// ==========================================
+
+import React, { useState, useEffect } from 'react';
+import { 
+  BookOpen, Feather, Mail, Users, Award, Compass, Search, 
+  RotateCcw, Heart, Send, CheckCircle, Plus, ChevronRight, 
+  MessageSquare, Flame, Sparkles, UserPlus, FileText, Globe, Clock, ShieldCheck
+} from 'lucide-react';
+
+// --- TYPES & INTERFACES ---
+interface Book {
+  id: string;
+  title: string;
+  author: string;
+  coverUrl: string;
+  era: string;
+  country: string;
+  pages: number;
+  eloRank: number;
+  rereadDates: string[];
+  description: string;
+}
+
+interface Letter {
+  id: string;
+  sender: string;
+  recipient: string;
+  bookTitle: string;
+  message: string;
+  sealed: boolean;
+  date: string;
+}
+
+interface Group {
+  id: string;
+  name: string;
+  description: string;
+  membersCount: number;
+  monthlyBook: string;
+  leaderboard: { rank: number; title: string; author: string; score: number }[];
+}
+
+export default function MarginaliaApp() {
+  // Navigation & View State
+  const [activeTab, setActiveTab] = useState<'stack' | 'duel' | 'profile' | 'social' | 'mail' | 'groups'>('stack');
+
+  // Core Data States
+  const [books, setBooks] = useState<Book[]>([
+    {
+      id: '1',
+      title: 'Middlemarch',
+      author: 'George Eliot',
+      coverUrl: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=400',
+      era: '19th Century',
+      country: 'United Kingdom',
+      pages: 880,
+      eloRank: 1620,
+      rereadDates: ['2024-05-12', '2026-01-10'],
+      description: 'A study of provincial life in England focusing on societal changes.'
+    },
+    {
+      id: '2',
+      title: 'The Master and Margarita',
+      author: 'Mikhail Bulgakov',
+      coverUrl: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=400',
+      era: '20th Century',
+      country: 'Russia',
+      pages: 412,
+      eloRank: 1580,
+      rereadDates: ['2025-08-19'],
+      description: 'The devil visits Moscow in this satirical masterpiece of Soviet life.'
+    },
+    {
+      id: '3',
+      title: 'The Iliad',
+      author: 'Homer',
+      coverUrl: 'https://images.unsplash.com/photo-1495640388908-05fa85288e61?auto=format&fit=crop&q=80&w=400',
+      era: 'Ancient',
+      country: 'Greece',
+      pages: 683,
+      eloRank: 1540,
+      rereadDates: [],
+      description: 'The epic tale of the wrath of Achilles during the Trojan War.'
+    },
+    {
+      id: '4',
+      title: 'The Magic Mountain',
+      author: 'Thomas Mann',
+      coverUrl: 'https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?auto=format&fit=crop&q=80&w=400',
+      era: '20th Century',
+      country: 'Germany',
+      pages: 720,
+      eloRank: 1500,
+      rereadDates: ['2025-11-04'],
+      description: 'A profound philosophical novel set in a Swiss sanatorium.'
+    }
+  ]);
+
+  // Duel State
+  const [duelPair, setDuelPair] = useState<[Book, Book]>([books[0], books[1]]);
+
+  // Social & Chat State
+  const [friends, setFriends] = useState([
+    { id: 'f1', name: 'Eleanor Vance', attunement: '92% Literary Attunement', status: 'Reading Poetry' },
+    { id: 'f2', name: 'Julian Cadogan', attunement: '86% Literary Attunement', status: 'Reviewing 19th c. Prose' }
+  ]);
+  const [marginNotes, setMarginNotes] = useState([
+    { id: 'm1', user: 'Eleanor Vance', book: 'Middlemarch', note: 'Book 2 chapter 11 annotation: Dorothea’s idealism feels especially piercing here.', time: '2 hours ago' }
+  ]);
+  const [newNoteInput, setNewNoteInput] = useState('');
+
+  // Postal Mail State
+  const [letters, setLetters] = useState<Letter[]>([
+    {
+      id: 'l1',
+      sender: 'Julian Cadogan',
+      recipient: 'Chloe',
+      bookTitle: 'The Master and Margarita',
+      message: 'Dearest colleague, I found the chapters on Satire remarkably aligned with your recent Substack piece. Do give this translation a perusal.',
+      sealed: false,
+      date: 'August 14, 2026'
+    }
+  ]);
+  const [isWritingLetter, setIsWritingLetter] = useState(false);
+  const [letterRecipient, setLetterRecipient] = useState('');
+  const [letterBook, setLetterBook] = useState('');
+  const [letterBody, setLetterBody] = useState('');
+
+  // Groups State
+  const [groups, setGroups] = useState<Group[]>([
+    {
+      id: 'g1',
+      name: 'The 19th Century Salon',
+      description: 'Dedicated study of realist prose, Victorian epistemology, and continental philosophy.',
+      membersCount: 142,
+      monthlyBook: 'Middlemarch by George Eliot',
+      leaderboard: [
+        { rank: 1, title: 'Middlemarch', author: 'George Eliot', score: 98 },
+        { rank: 2, title: 'War and Peace', author: 'Leo Tolstoy', score: 95 },
+        { rank: 3, title: 'Madame Bovary', author: 'Gustave Flaubert', score: 91 }
+      ]
+    }
+  ]);
+
+  // Search & Add Book State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+
+  // Open Library API Fetcher with Fallback
+  useEffect(() => {
+    if (searchQuery.length < 3) {
+      setSearchResults([]);
+      return;
+    }
+    const fetchBooks = async () => {
+      try {
+        const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(searchQuery)}&limit=5`);
+        const data = await res.json();
+        const formatted = data.docs.map((doc: any, idx: number) => ({
+          id: `ol-${idx}-${doc.key}`,
+          title: doc.title,
+          author: doc.author_name ? doc.author_name[0] : 'Unknown Author',
+          coverUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&q=80&w=400',
+          era: doc.publish_year ? `${Math.floor(doc.publish_year / 100) * 100}s` : 'Unknown Era',
+          country: doc.publish_place ? doc.publish_place[0] : 'Global',
+          pages: doc.number_of_pages_median || 350,
+          eloRank: 1400,
+          rereadDates: [],
+          description: doc.first_sentence ? doc.first_sentence[0] : 'A classic volume worthy of careful annotation.'
+        }));
+        setSearchResults(formatted);
+      } catch (err) {
+        // Fallback or handle offline silently
+        setSearchResults([]);
+      }
+    };
+    const timer = setTimeout(fetchBooks, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Elo Duels Logic
+  const handleDuelChoice = (winner: Book, loser: Book) => {
+    const K = 32;
+    const expectedWinner = 1 / (1 + Math.pow(10, (loser.eloRank - winner.eloRank) / 400));
+    const expectedLoser = 1 / (1 + Math.pow(10, (winner.eloRank - loser.eloRank) / 400));
+
+    const newWinnerRank = Math.round(winner.eloRank + K * (1 - expectedWinner));
+    const newLoserRank = Math.round(loser.eloRank + K * (0 - expectedLoser));
+
+    setBooks(prev => prev.map(b => {
+      if (b.id === winner.id) return { ...b, eloRank: newWinnerRank };
+      if (b.id === loser.id) return { ...b, eloRank: newLoserRank };
+      return b;
+    }).sort((a, b) => b.eloRank - a.eloRank));
+
+    // Next random duel pair
+    const shuffled = [...books].sort(() => 0.5 - Math.random());
+    if (shuffled.length >= 2) {
+      setDuelPair([shuffled[0], shuffled[1]]);
+    }
+  };
+
+  const handleReread = (id: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    setBooks(prev => prev.map(b => {
+      if (b.id === id) {
+        return { ...b, rereadDates: [...b.rereadDates, today] };
+      }
+      return b;
+    }));
+  };
+
+  const addNewBookToStack = (bookToAdd: Book) => {
+    if (!books.some(b => b.title === bookToAdd.title)) {
+      setBooks(prev => [bookToAdd, ...prev].sort((a, b) => b.eloRank - a.eloRank));
+    }
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  // Export Reading Journal to Markdown
+  const exportJournal = () => {
+    let content = `# Marginalia Reading Journal\n\n`;
+    content += `## Master Relative Ranking Stack\n`;
+    books.forEach((b, i) => {
+      content += `${i + 1}. **${b.title}** by ${b.author} (Elo: ${b.eloRank}, Era: ${b.era})\n`;
+      if (b.rereadDates.length > 0) {
+        content += `   - Reread dates: ${b.rereadDates.join(', ')}\n`;
+      }
+    });
+    content += `\n## Margin Notes & Reflections\n`;
+    marginNotes.forEach(m => {
+      content += `- [${m.book}] "${m.note}" — *${m.user}* (${m.time})\n`;
+    });
+
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'marginalia_reading_journal.md';
+    link.click();
+  };
+
+  // Stats Calculations for Profile
+  const totalPagesRead = books.reduce((acc, b) => acc + b.pages, 0);
+  const totalRereads = books.reduce((acc, b) => acc + b.rereadDates.length, 0);
+  const topEra = '19th Century';
+  const topCountry = 'Russia / United Kingdom';
+
+  return (
+    <div className="min-h-screen bg-[#FDFBF7] text-[#3E332E] font-serif selection:bg-[#B89388]/30 flex flex-col">
+      
+      {/* HEADER BAR */}
+      <header className="border-b border-[#3E332E]/15 bg-[#F5F2EB]/80 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Feather className="w-6 h-6 text-[#7A8D7B]" />
+          <h1 className="text-2xl font-semibold tracking-wide text-[#1A110E] font-serif">Marginalia</h1>
+          <span className="text-xs uppercase tracking-widest px-2 py-0.5 border border-[#3E332E]/30 rounded-full text-[#3E332E]/70 hidden sm:inline-block">
+            Sanctuary Edition
+          </span>
+        </div>
+
+        {/* NAVIGATION TABS */}
+        <nav className="hidden md:flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner">
+          {[
+            { id: 'stack', label: 'Ranking Stack', icon: BookOpen },
+            { id: 'duel', label: 'Duels', icon: Flame },
+            { id: 'profile', label: 'Reader Profile', icon: Compass },
+            { id: 'social', label: 'The Margins', icon: Users },
+            { id: 'mail', label: 'Postal Mail', icon: Mail },
+            { id: 'groups', label: 'Salons', icon: Award },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-sm transition-all ${
+                  isActive 
+                    ? 'bg-[#1A110E] text-[#FDFBF7] shadow-sm' 
+                    : 'text-[#3E332E]/70 hover:text-[#1A110E] hover:bg-[#F5F2EB]'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={exportJournal}
+            className="text-xs border border-[#3E332E]/30 px-3 py-1.5 rounded hover:bg-[#3E332E] hover:text-[#FDFBF7] transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Export Journal</span>
+          </button>
+        </div>
+      </header>
+
+      {/* MOBILE NAV BAR */}
+      <div className="md:hidden flex overflow-x-auto bg-[#F5F2EB] border-b border-[#3E332E]/10 px-4 py-2 gap-2">
+        {['stack', 'duel', 'profile', 'social', 'mail', 'groups'].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab as any)}
+            className={`px-3 py-1 rounded text-xs whitespace-nowrap capitalize ${
+              activeTab === tab ? 'bg-[#1A110E] text-[#FDFBF7]' : 'text-[#3E332E]/70'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* MAIN CONTAINER */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+        
+        {/* --- VIEW 1: RECTO-VERSO RANKING STACK --- */}
+        {activeTab === 'stack' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#3E332E]/15 pb-4">
+              <div>
+                <h2 className="text-3xl font-serif text-[#1A110E]">Master Ranking Stack</h2>
+                <p className="text-sm text-[#3E332E]/70 italic">Relative Elo-ordered hierarchy of read volumes.</p>
+              </div>
+
+              {/* Search & Ingestion bar */}
+              <div className="relative w-full sm:w-72">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-[#3E332E]/50" />
+                <input
+                  type="text"
+                  placeholder="Search Open Library to add book..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#F5F2EB] border border-[#3E332E]/20 rounded-md pl-9 pr-4 py-2 text-sm text-[#1A110E] placeholder-[#3E332E]/40 focus:outline-none focus:border-[#7A8D7B]"
+                />
+                {searchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-[#FDFBF7] border border-[#3E332E]/20 rounded-md shadow-xl z-50 overflow-hidden max-h-60 overflow-y-auto">
+                    {searchResults.map((book) => (
+                      <div
+                        key={book.id}
+                        onClick={() => addNewBookToStack(book)}
+                        className="p-3 hover:bg-[#F5F2EB] cursor-pointer flex items-center justify-between border-b border-[#3E332E]/10 last:border-none"
+                      >
+                        <div className="flex items-center gap-3">
+                          <img src={book.coverUrl} alt="" className="w-8 h-10 object-cover rounded shadow-xs" />
+                          <div>
+                            <p className="text-sm font-semibold text-[#1A110E]">{book.title}</p>
+                            <p className="text-xs text-[#3E332E]/60">{book.author}</p>
+                          </div>
+                        </div>
+                        <Plus className="w-4 h-4 text-[#7A8D7B]" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Book Cards Grid/List */}
+            <div className="grid gap-4">
+              {books.map((book, index) => (
+                <div
+                  key={book.id}
+                  className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs hover:border-[#7A8D7B] transition-all"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="font-serif text-lg text-[#3E332E]/40 w-6 text-right">#{index + 1}</span>
+                    <img src={book.coverUrl} alt={book.title} className="w-14 h-20 object-cover rounded shadow-sm border border-[#3E332E]/20" />
+                    <div>
+                      <h3 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h3>
+                      <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
+                        <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.era}</span>
+                        <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>
+                        <span>{book.pages} pages</span>
+                        {book.rereadDates.length > 0 && (
+                          <span className="text-[#B89388] font-medium flex items-center gap-1">
+                            <RotateCcw className="w-3 h-3" /> Reread {book.rereadDates.length}x
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
+                    <div className="text-right">
+                      <span className="text-xs uppercase tracking-wider text-[#3E332E]/50 block">Elo Score</span>
+                      <span className="font-mono text-sm font-semibold text-[#1A110E]">{book.eloRank}</span>
+                    </div>
+                    <button
+                      onClick={() => handleReread(book.id)}
+                      className="border border-[#3E332E]/30 px-3 py-1.5 rounded text-xs hover:bg-[#7A8D7B] hover:text-white hover:border-transparent transition-all flex items-center gap-1.5"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Log Reread</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* --- VIEW 2: PAIRWISE DUELS --- */}
+        {activeTab === 'duel' && (
+          <div className="max-w-3xl mx-auto space-y-8 animate-fadeIn text-center">
+            <div>
+              <h2 className="text-3xl font-serif text-[#1A110E]">Recto-Verso Duels</h2>
+              <p className="text-sm text-[#3E332E]/70 italic mt-1">"I liked this one better." Help calibrate your relative ranking stack.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 my-8">
+              {duelPair.map((book, idx) => (
+                <div
+                  key={book.id}
+                  onClick={() => handleDuelChoice(book, duelPair[1 - idx])}
+                  className="bg-[#F5F2EB] border-2 border-[#3E332E]/20 hover:border-[#7A8D7B] rounded-xl p-6 cursor-pointer transition-all transform hover:-translate-y-1 shadow-md flex flex-col items-center group"
+                >
+                  <img src={book.coverUrl} alt="" className="w-36 h-52 object-cover rounded shadow-lg border border-[#3E332E]/20 mb-4 group-hover:scale-105 transition-transform" />
+                  <h3 className="font-serif text-xl text-[#1A110E] font-medium">{book.title}</h3>
+                  <p className="text-sm text-[#3E332E]/70 mb-3">by {book.author}</p>
+                  <p className="text-xs text-[#3E332E]/60 italic line-clamp-2 mb-4 bg-[#FDFBF7] p-2 rounded border border-[#3E332E]/10">"{book.description}"</p>
+                  <button className="mt-auto bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase group-hover:bg-[#7A8D7B] transition-colors">
+                    I prefer this volume
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                const shuffled = [...books].sort(() => 0.5 - Math.random());
+                if (shuffled.length >= 2) setDuelPair([shuffled[0], shuffled[1]]);
+              }}
+              className="text-xs text-[#3E332E]/70 underline hover:text-[#1A110E]"
+            >
+              Skip this pairing
+            </button>
+          </div>
+        )}
+
+        {/* --- VIEW 3: DYNAMIC READER PROFILE --- */}
+        {activeTab === 'profile' && (
+          <div className="space-y-8 animate-fadeIn">
+            <div className="border-b border-[#3E332E]/15 pb-4">
+              <h2 className="text-3xl font-serif text-[#1A110E]">Reader Profile & Analytics</h2>
+              <p className="text-sm text-[#3E332E]/70 italic">Archetype: 19th Century Realist & Philosophical Escapist</p>
+            </div>
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-5 rounded-lg text-center">
+                <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Total Volumes</span>
+                <span className="text-3xl font-serif text-[#1A110E]">{books.length}</span>
+              </div>
+              <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-5 rounded-lg text-center">
+                <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Pages Read</span>
+                <span className="text-3xl font-serif text-[#1A110E]">{totalPagesRead.toLocaleString()}</span>
+              </div>
+              <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-5 rounded-lg text-center">
+                <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Favorite Era</span>
+                <span className="text-xl font-serif text-[#1A110E] mt-1 block">{topEra}</span>
+              </div>
+              <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-5 rounded-lg text-center">
+                <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Total Rereads</span>
+                <span className="text-3xl font-serif text-[#1A110E]">{totalRereads}</span>
+              </div>
+            </div>
+
+            {/* Detailed Breakdown Panels */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-6 space-y-4">
+                <h3 className="font-serif text-xl text-[#1A110E] flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-[#7A8D7B]" />
+                  <span>Literary Geography</span>
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-xs text-[#3E332E]/80 mb-1">
+                      <span>United Kingdom (Victorian Realism)</span>
+                      <span>45%</span>
+                    </div>
+                    <div className="w-full bg-[#3E332E]/10 h-2 rounded-full overflow-hidden">
+                      <div className="bg-[#7A8D7B] h-full w-[45%]"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-[#3E332E]/80 mb-1">
+                      <span>Continental Europe (German/Russian)</span>
+                      <span>40%</span>
+                    </div>
+                    <div className="w-full bg-[#3E332E]/10 h-2 rounded-full overflow-hidden">
+                      <div className="bg-[#B89388] h-full w-[40%]"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-[#3E332E]/80 mb-1">
+                      <span>Classical Antiquity</span>
+                      <span>15%</span>
+                    </div>
+                    <div className="w-full bg-[#3E332E]/10 h-2 rounded-full overflow-hidden">
+                      <div className="bg-[#1A110E] h-full w-[15%]"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-6 space-y-4">
+                <h3 className="font-serif text-xl text-[#1A110E] flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-[#7A8D7B]" />
+                  <span>Reading Momentum & Pacing</span>
+                </h3>
+                <p className="text-sm text-[#3E332E]/80 leading-relaxed">
+                  Your reading velocity clusters heavily around dense philosophical treatises and multi-volume Victorian editions. Average completion rate is <strong>4.2 days per 100 pages</strong>, reflecting careful marginal annotation habits.
+                </p>
+                <div className="pt-2 border-t border-[#3E332E]/10 flex items-center justify-between text-xs text-[#3E332E]/60">
+                  <span>Most Revisited Author: George Eliot</span>
+                  <span>Reread Fidelity: High</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- VIEW 4: SOCIAL & THE MARGINS --- */}
+        {activeTab === 'social' && (
+          <div className="space-y-8 animate-fadeIn">
+            <div className="border-b border-[#3E332E]/15 pb-4">
+              <h2 className="text-3xl font-serif text-[#1A110E]">The Margins & Companions</h2>
+              <p className="text-sm text-[#3E332E]/70 italic">Pass notes back and forth in the margins of shared volumes.</p>
+            </div>
+
+            {/* Friends list & compatibility */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-4">
+                <h3 className="font-serif text-xl text-[#1A110E]">Connected Bibliophiles</h3>
+                <div className="space-y-3">
+                  {friends.map(friend => (
+                    <div key={friend.id} className="bg-[#FDFBF7] p-4 rounded-md border border-[#3E332E]/10 flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-[#1A110E]">{friend.name}</p>
+                        <p className="text-xs text-[#7A8D7B] font-semibold mt-0.5">{friend.attunement}</p>
+                      </div>
+                      <span className="text-xs text-[#3E332E]/60 italic">{friend.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Collaborative Margin Notes Feed */}
+              <div className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 flex flex-col justify-between">
+                <div>
+                  <h3 className="font-serif text-xl text-[#1A110E] mb-4">Live Margin Notes</h3>
+                  <div className="space-y-3 max-h-52 overflow-y-auto pr-1">
+                    {marginNotes.map(m => (
+                      <div key={m.id} className="bg-[#FDFBF7] p-3 rounded border border-[#3E332E]/10 text-sm">
+                        <div className="flex justify-between items-center text-xs text-[#3E332E]/50 mb-1">
+                          <span className="font-semibold text-[#1A110E]">{m.user}</span>
+                          <span>{m.time}</span>
+                        </div>
+                        <p className="italic text-[#3E332E]/90">"{m.note}"</p>
+                        <span className="text-[10px] text-[#7A8D7B] uppercase mt-1 block">Volume: {m.book}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Leave a margin note..."
+                    value={newNoteInput}
+                    onChange={(e) => setNewNoteInput(e.target.value)}
+                    className="flex-1 bg-[#FDFBF7] border border-[#3E332E]/20 rounded px-3 py-1.5 text-sm text-[#1A110E] focus:outline-none focus:border-[#7A8D7B]"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newNoteInput.trim()) return;
+                      setMarginNotes(prev => [
+                        { id: Date.now().toString(), user: 'You', book: 'Middlemarch', note: newNoteInput, time: 'Just now' },
+                        ...prev
+                      ]);
+                      setNewNoteInput('');
+                    }}
+                    className="bg-[#1A110E] text-[#FDFBF7] px-4 py-1.5 rounded text-xs hover:bg-[#7A8D7B] transition-colors"
+                  >
+                    Inscribe
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- VIEW 5: POSTAL MAIL RECOMMENDATION SYSTEM --- */}
+        {activeTab === 'mail' && (
+          <div className="space-y-8 animate-fadeIn">
+            <div className="flex justify-between items-center border-b border-[#3E332E]/15 pb-4">
+              <div>
+                <h2 className="text-3xl font-serif text-[#1A110E]">The Desk & Postal Mail</h2>
+                <p className="text-sm text-[#3E332E]/70 italic">Send and receive vintage wax-sealed recommendation letters.</p>
+              </div>
+              <button
+                onClick={() => setIsWritingLetter(true)}
+                className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase flex items-center gap-2 hover:bg-[#7A8D7B] transition-colors"
+              >
+                <Mail className="w-4 h-4" />
+                <span>Dispatch New Letter</span>
+              </button>
+            </div>
+
+            {/* Letter Writing Modal */}
+            {isWritingLetter && (
+              <div className="fixed inset-0 bg-[#1A110E]/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+                <div className="bg-[#FDFBF7] border-2 border-[#3E332E]/20 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+                  <h3 className="font-serif text-2xl text-[#1A110E]">Seal a Recommendation Letter</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Recipient Fellow</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Eleanor Vance"
+                        value={letterRecipient}
+                        onChange={(e) => setLetterRecipient(e.target.value)}
+                        className="w-full bg-[#F5F2EB] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Book Title</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. The Iliad"
+                        value={letterBook}
+                        onChange={(e) => setLetterBook(e.target.value)}
+                        className="w-full bg-[#F5F2EB] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Handwritten Note</label>
+                      <textarea
+                        rows={4}
+                        placeholder="Inscribe your thoughts..."
+                        value={letterBody}
+                        onChange={(e) => setLetterBody(e.target.value)}
+                        className="w-full bg-[#F5F2EB] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E] font-serif italic"
+                      ></textarea>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button
+                      onClick={() => setIsWritingLetter(false)}
+                      className="border border-[#3E332E]/30 px-4 py-2 rounded text-xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!letterRecipient || !letterBook) return;
+                        setLetters(prev => [
+                          {
+                            id: Date.now().toString(),
+                            sender: 'You',
+                            recipient: letterRecipient,
+                            bookTitle: letterBook,
+                            message: letterBody || 'A magnificent volume worthy of your collection.',
+                            sealed: true,
+                            date: 'Just now'
+                          },
+                          ...prev
+                        ]);
+                        setIsWritingLetter(false);
+                        setLetterRecipient('');
+                        setLetterBook('');
+                        setLetterBody('');
+                      }}
+                      className="bg-[#7A8D7B] text-white px-4 py-2 rounded text-xs uppercase tracking-wider hover:bg-[#1A110E] transition-colors"
+                    >
+                      Seal & Dispatch
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Letterbox Inbox/Outbox */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {letters.map((letter) => (
+                <div key={letter.id} className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-4 shadow-sm relative overflow-hidden">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-widest bg-[#7A8D7B]/20 text-[#3E332E] px-2 py-0.5 rounded">
+                        From {letter.sender} to {letter.recipient}
+                      </span>
+                      <h4 className="font-serif text-xl text-[#1A110E] mt-2">{letter.bookTitle}</h4>
+                    </div>
+                    <span className="text-xs text-[#3E332E]/50">{letter.date}</span>
+                  </div>
+
+                  <div className="bg-[#FDFBF7] p-4 rounded border border-[#3E332E]/10">
+                    <p className="font-serif italic text-sm text-[#3E332E]/90 leading-relaxed">
+                      "{letter.message}"
+                    </p>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-2 border-t border-[#3E332E]/10">
+                    <span className="text-xs text-[#3E332E]/60 flex items-center gap-1">
+                      {letter.sealed ? <ShieldCheck className="w-3.5 h-3.5 text-[#B89388]" /> : <CheckCircle className="w-3.5 h-3.5 text-[#7A8D7B]" />}
+                      {letter.sealed ? 'Wax Sealed Envelope' : 'Opened & Read'}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setLetters(prev => prev.map(l => l.id === letter.id ? { ...l, sealed: false } : l));
+                      }}
+                      className="text-xs text-[#7A8D7B] hover:text-[#1A110E] font-medium underline"
+                    >
+                      {letter.sealed ? 'Break Wax Seal' : 'Add to Stack Queue'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* --- VIEW 6: READING GROUPS & SALONS --- */}
+        {activeTab === 'groups' && (
+          <div className="space-y-8 animate-fadeIn">
+            <div className="border-b border-[#3E332E]/15 pb-4">
+              <h2 className="text-3xl font-serif text-[#1A110E]">Reading Salons & Collective Guilds</h2>
+              <p className="text-sm text-[#3E332E]/70 italic">Collective leaderboards and monthly shared discussion titles.</p>
+            </div>
+
+            <div className="space-y-6">
+              {groups.map(group => (
+                <div key={group.id} className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <h3 className="font-serif text-2xl text-[#1A110E]">{group.name}</h3>
+                      <p className="text-sm text-[#3E332E]/80 mt-1">{group.description}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs uppercase tracking-wider text-[#3E332E]/50 block">Members</span>
+                      <span className="font-serif text-lg font-medium text-[#1A110E]">{group.membersCount} Scholars</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#FDFBF7] p-4 rounded-md border border-[#3E332E]/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <span className="text-xs uppercase tracking-wider text-[#7A8D7B] font-semibold block">Current Monthly Read</span>
+                      <p className="font-serif text-lg text-[#1A110E] mt-0.5">{group.monthlyBook}</p>
+                    </div>
+                    <button className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs uppercase tracking-wider hover:bg-[#7A8D7B] transition-colors">
+                      Join Discussion
+                    </button>
+                  </div>
+
+                  {/* Collective Leaderboard */}
+                  <div>
+                    <h4 className="text-xs uppercase tracking-wider text-[#3E332E]/60 mb-3">Collective Salon Leaderboard</h4>
+                    <div className="grid gap-2">
+                      {group.leaderboard.map(item => (
+                        <div key={item.rank} className="bg-[#FDFBF7] px-4 py-2.5 rounded border border-[#3E332E]/10 flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <span className="font-serif text-[#3E332E]/50 w-4">#{item.rank}</span>
+                            <div>
+                              <p className="text-sm font-semibold text-[#1A110E]">{item.title}</p>
+                              <p className="text-xs text-[#3E332E]/60">{item.author}</p>
+                            </div>
+                          </div>
+                          <span className="font-mono text-sm font-semibold text-[#7A8D7B]">{item.score} / 100</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* FOOTER */}
+      <footer className="border-t border-[#3E332E]/15 bg-[#F5F2EB]/50 py-6 text-center text-xs text-[#3E332E]/60 font-serif">
+        <p>Marginalia — Designed for Bibliophiles & Scholars. Compatible with GitHub storage deployment.</p>
+      </footer>
+
+    </div>
+  );
+}
