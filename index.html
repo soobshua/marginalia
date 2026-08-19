@@ -48,7 +48,7 @@
           const [isLoading, setIsLoading] = useState(true);
 
           const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/10LcHUiSL2_GG_OyT18wyeFkJo3dzn0wU9o4QMq1Zdbw/export?format=csv";
-          const STORAGE_KEY = 'marginalia_corpus_state_v4';
+          const STORAGE_KEY = 'marginalia_corpus_state_v5';
 
           // Binary insertion duel state
           const [activeDuel, setActiveDuel] = useState(null);
@@ -75,7 +75,7 @@
             return () => document.removeEventListener('mousedown', handleClickOutside);
           }, []);
 
-          // Fetch and parse Google Sheet CSV safely — robust multi-line quote handling to prevent splitting artifacts
+          // Fetch and parse Google Sheet CSV safely — strict standalone artifact filter only
           useEffect(() => {
             fetch(SHEET_CSV_URL)
               .then(res => res.text())
@@ -132,9 +132,9 @@
                 const parsedBooks = rows.slice(1).filter((row) => {
                   if (row.length === 0 || !row.some(cell => cell !== '')) return false;
                   
-                  // Filter out any anomalous rows containing standalone read metadata or fragments
-                  const joined = row.join(' ').toLowerCase();
-                  if (joined.includes('read 2021') || (joined.includes('unknown author') && row.length < 3)) {
+                  // Only drop isolated rows that are purely the stray "Read 2021" / "Unknown Author" artifact itself
+                  const joined = row.join(' ').toLowerCase().trim();
+                  if (joined === 'read 2021' || (joined.includes('read 2021') && row.length <= 2 && row[0].toLowerCase().includes('read'))) {
                     return false;
                   }
                   
