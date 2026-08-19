@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Marginalia — 500 Foundational Texts Sanctuary</title>
+    <title>Marginalia — The 500</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React 18 UMD -->
@@ -47,45 +47,14 @@
           const [books, setBooks] = useState([]);
           const [isLoading, setIsLoading] = useState(true);
 
-          // Your Google Sheet CSV Export Link:
           const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/10LcHUiSL2_GG_OyT18wyeFkJo3dzn0wU9o4QMq1Zdbw/export?format=csv";
 
           const [duelPair, setDuelPair] = useState([]);
-          const [friends, setFriends] = useState([
-            { id: 'f1', name: 'Eleanor Vance', attunement: '92% Canon Attunement', status: 'Annotating Ancient Epics' },
-            { id: 'f2', name: 'Julian Cadogan', attunement: '86% Canon Attunement', status: 'Reviewing 19th c. Prose' }
-          ]);
-          const [marginNotes, setMarginNotes] = useState([
-            { id: 'm1', user: 'Eleanor Vance', book: 'The Iliad', note: 'Book 1: The invocation sets the entire architectural weight of the project.', time: '2 hours ago' }
-          ]);
-          const [newNoteInput, setNewNoteInput] = useState('');
-          const [selectedBookForNote, setSelectedBookForNote] = useState('');
-
-          const [letters, setLetters] = useState([
-            {
-              id: 'l1',
-              sender: 'Julian Cadogan',
-              recipient: 'Chloe',
-              bookTitle: 'The Iliad',
-              message: 'Dearest colleague, I found your notes on the text remarkably perceptive.',
-              sealed: false,
-              date: 'August 19, 2026'
-            }
-          ]);
-          const [isWritingLetter, setIsWritingLetter] = useState(false);
-          const [letterRecipient, setLetterRecipient] = useState('');
-          const [letterBook, setLetterBook] = useState('');
-          const [letterBody, setLetterBody] = useState('');
-
-          const [groups, setGroups] = useState([
-            {
-              id: 'g1',
-              name: 'The 500 Foundations Guild',
-              description: 'Rigorous tracking, translation comparisons, and relative grading across the master foundational corpus.',
-              membersCount: 42,
-              currentFocus: 'Classical Epics & Continental Philosophy'
-            }
-          ]);
+          
+          // Dispatch state
+          const [dispatchBook, setDispatchBook] = useState('');
+          const [dispatchRecipient, setDispatchRecipient] = useState('');
+          const [dispatchMessage, setDispatchMessage] = useState('');
 
           useEffect(() => {
             if (window.lucide) window.lucide.createIcons();
@@ -110,16 +79,16 @@
                     author: getCol('author') || 'Unknown Author',
                     era: getCol('era') || 'Foundational',
                     country: getCol('country') || 'Global',
-                    pages: parseInt(getCol('pages')) || 350,
-                    eloRank: parseInt(getCol('elorank')) || 1500,
+                    year: parseInt(getCol('year')) || 1900,
+                    eloRank: null,
+                    readCount: 0,
                     rereadDates: [],
                     description: getCol('description') || 'Foundational text item.'
                   };
                 });
 
-                const sorted = parsedBooks.sort((a, b) => b.eloRank - a.eloRank);
-                setBooks(sorted);
-                if (sorted.length > 0) setSelectedBookForNote(sorted[0].title);
+                setBooks(parsedBooks);
+                if (parsedBooks.length > 0) setDispatchBook(parsedBooks[0].title);
                 setIsLoading(false);
               })
               .catch(err => {
@@ -128,11 +97,61 @@
               });
           }, []);
 
+          const rankedBooks = books.filter(b => b.eloRank !== null).sort((a, b) => b.eloRank - a.eloRank);
+          const unrankedBooks = books.filter(b => b.eloRank === null);
+
           useEffect(() => {
-            if (books.length >= 2 && duelPair.length === 0) {
-              setDuelPair([books[0], books[1]]);
+            if (rankedBooks.length >= 2 && duelPair.length === 0) {
+              triggerRandomDuel(rankedBooks);
             }
           }, [books]);
+
+          const triggerRandomDuel = (currentRanked = rankedBooks) => {
+            if (currentRanked.length < 2) {
+              setDuelPair([]);
+              return;
+            }
+            const shuffled = [...currentRanked].sort(() => 0.5 - Math.random());
+            setDuelPair([shuffled[0], shuffled[1]]);
+          };
+
+          const handleFirstRead = (id) => {
+            setBooks(prev => {
+              const updated = prev.map(b => {
+                if (b.id === id) {
+                  return { ...b, eloRank: 1500, readCount: 1 };
+                }
+                return b;
+              });
+              
+              const newRanked = updated.filter(b => b.eloRank !== null);
+              if (newRanked.length >= 2 && duelPair.length === 0) {
+                const shuffled = [...newRanked].sort(() => 0.5 - Math.random());
+                setDuelPair([shuffled[0], shuffled[1]]);
+              }
+              return updated;
+            });
+          };
+
+          const handleReread = (id) => {
+            const today = new Date().toISOString().split('T')[0];
+            setBooks(prev => prev.map(b => {
+              if (b.id === id) {
+                return { ...b, readCount: b.readCount + 1, rereadDates: [...b.rereadDates, today] };
+              }
+              return b;
+            }));
+
+            const targetBook = books.find(b => b.id === id);
+            if (targetBook && targetBook.eloRank !== null) {
+              const peers = rankedBooks.filter(b => b.id !== id);
+              if (peers.length > 0) {
+                const randomPeer = peers[Math.floor(Math.random() * peers.length)];
+                setDuelPair([targetBook, randomPeer]);
+                setActiveTab('duel');
+              }
+            }
+          };
 
           const handleDuelChoice = (winner, loser) => {
             const K = 32;
@@ -146,44 +165,76 @@
               if (b.id === winner.id) return { ...b, eloRank: newWinnerRank };
               if (b.id === loser.id) return { ...b, eloRank: newLoserRank };
               return b;
-            }).sort((a, b) => b.eloRank - a.eloRank));
-
-            const shuffled = [...books].sort(() => 0.5 - Math.random());
-            if (shuffled.length >= 2) setDuelPair([shuffled[0], shuffled[1]]);
-          };
-
-          const handleReread = (id) => {
-            const today = new Date().toISOString().split('T')[0];
-            setBooks(prev => prev.map(b => {
-              if (b.id === id) {
-                return { ...b, rereadDates: [...b.rereadDates, today] };
-              }
-              return b;
             }));
+
+            setTimeout(() => {
+              const currentRanked = books.map(b => {
+                if (b.id === winner.id) return { ...b, eloRank: newWinnerRank };
+                if (b.id === loser.id) return { ...b, eloRank: newLoserRank };
+                return b;
+              }).filter(b => b.eloRank !== null);
+              
+              if (currentRanked.length >= 2) {
+                const shuffled = [...currentRanked].sort(() => 0.5 - Math.random());
+                setDuelPair([shuffled[0], shuffled[1]]);
+              } else {
+                setDuelPair([]);
+              }
+            }, 100);
           };
 
           const exportJournal = () => {
-            let content = `# 500 Foundational Texts Sanctuary Journal\n\n`;
-            content += `## Master Relative Ranking Stack (${books.length} Texts)\n`;
-            books.forEach((b, i) => {
-              content += `${i + 1}. **${b.title}** by ${b.author} (Elo: ${b.eloRank}, Era: ${b.era})\n`;
+            let content = `# The 500 Sanctuary Journal\n\n`;
+            content += `## Ranked Stack (${rankedBooks.length} Texts)\n`;
+            rankedBooks.forEach((b, i) => {
+              content += `${i + 1}. **${b.title}** by ${b.author} (Elo: ${b.eloRank})\n`;
             });
 
             const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = 'foundational_texts_sanctuary.md';
+            link.download = 'the_500_sanctuary.md';
             link.click();
           };
 
-          const totalPagesRead = books.reduce((acc, b) => acc + b.pages, 0);
-          const totalRereads = books.reduce((acc, b) => acc + b.rereadDates.length, 0);
+          const handleDispatchMail = (e) => {
+            e.preventDefault();
+            const subject = encodeURIComponent(`A Foundational Text Dispatch: ${dispatchBook}`);
+            const body = encodeURIComponent(`Hello,\n\nI am sharing a foundational text with you from The 500 corpus:\n\nTitle: ${dispatchBook}\n\nNote:\n${dispatchMessage}\n\n— Sent via Marginalia`);
+            window.location.href = `mailto:${dispatchRecipient}?subject=${subject}&body=${body}`;
+          };
+
+          const getFavoriteMetric = (key) => {
+            if (rankedBooks.length === 0) return 'None yet';
+            const counts = {};
+            rankedBooks.forEach(b => {
+              let val = b[key];
+              if (key === 'decade') {
+                const yr = parseInt(b.year) || 1900;
+                val = `${Math.floor(yr / 10) * 10}s`;
+              }
+              if (val) counts[val] = (counts[val] || 0) + 1;
+            });
+            let topVal = 'None';
+            let maxCount = 0;
+            for (const [k, v] of Object.entries(counts)) {
+              if (v > maxCount) {
+                maxCount = v;
+                topVal = k;
+              }
+            }
+            return topVal;
+          };
+
+          const favoriteCountry = getFavoriteMetric('country');
+          const favoriteAuthor = getFavoriteMetric('author');
+          const favoriteDecade = getFavoriteMetric('decade');
 
           if (isLoading) {
             return (
               <div className="min-h-screen flex items-center justify-center bg-[#FDFBF7]">
-                <p className="font-serif italic text-lg text-[#3E332E]">Loading your 500 Foundational Texts Corpus...</p>
+                <p className="font-serif italic text-lg text-[#3E332E]">Loading The 500 Corpus...</p>
               </div>
             );
           }
@@ -193,20 +244,15 @@
               <header className="border-b border-[#3E332E]/15 bg-[#F5F2EB]/80 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Icon name="feather" className="w-6 h-6 text-[#7A8D7B]" />
-                  <h1 className="text-2xl font-semibold tracking-wide text-[#1A110E] font-serif">Marginalia</h1>
-                  <span className="text-xs uppercase tracking-widest px-2 py-0.5 border border-[#3E332E]/30 rounded-full text-[#3E332E]/70 hidden sm:inline-block">
-                    500 Foundations Edition
-                  </span>
+                  <h1 className="text-2xl font-semibold tracking-wide text-[#1A110E] font-serif">The 500</h1>
                 </div>
 
                 <nav className="hidden md:flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner">
                   {[
                     { id: 'stack', label: 'Ranking Stack', icon: 'book-open' },
                     { id: 'duel', label: 'Duels', icon: 'flame' },
-                    { id: 'profile', label: 'Analytics', icon: 'compass' },
-                    { id: 'social', label: 'The Margins', icon: 'users' },
-                    { id: 'mail', label: 'Postal Mail', icon: 'mail' },
-                    { id: 'groups', label: 'Guilds', icon: 'award' },
+                    { id: 'profile', label: 'Reader Profile', icon: 'compass' },
+                    { id: 'dispatch', label: 'Dispatch Letter', icon: 'send' },
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -232,252 +278,204 @@
 
               <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
                 {activeTab === 'stack' && (
-                  <div className="space-y-6 animate-fadeIn">
-                    <div className="flex justify-between items-center border-b border-[#3E332E]/15 pb-4">
-                      <div>
-                        <h2 className="text-3xl font-serif text-[#1A110E]">Master 500 Hierarchy Stack</h2>
-                        <p className="text-sm text-[#3E332E]/70 italic">Relative Elo ranking synchronized directly from your Google Sheet.</p>
-                      </div>
-                      <span className="font-mono text-xs bg-[#F5F2EB] border border-[#3E332E]/20 px-3 py-1 rounded">
-                        {books.length} Texts Synchronized
-                      </span>
+                  <div className="space-y-8 animate-fadeIn">
+                    <div>
+                      <h2 className="text-3xl font-serif text-[#1A110E]">The 500</h2>
+                      <p className="text-sm text-[#3E332E]/70 italic mt-1">Master relative ranking stack based on your logged reads.</p>
                     </div>
 
-                    <div className="grid gap-4">
-                      {books.map((book, index) => (
-                        <div
-                          key={book.id}
-                          className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
-                        >
-                          <div className="flex items-center gap-4">
-                            <span className="font-serif text-lg text-[#3E332E]/40 w-6 text-right">#{index + 1}</span>
-                            <div>
-                              <h3 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h3>
-                              <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
-                              <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
-                                <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.era}</span>
-                                <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>
-                                <span>{book.pages} pages</span>
-                                {book.rereadDates.length > 0 && (
-                                  <span className="text-[#B89388] font-medium flex items-center gap-1">
-                                    <Icon name="rotate-ccw" className="w-3 h-3" /> Reread {book.rereadDates.length}x
-                                  </span>
-                                )}
+                    {rankedBooks.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2">Ranked Texts</h3>
+                        <div className="grid gap-4">
+                          {rankedBooks.map((book, index) => (
+                            <div
+                              key={book.id}
+                              className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
+                            >
+                              <div className="flex items-center gap-4">
+                                <span className="font-serif text-lg text-[#3E332E]/40 w-6 text-right">#{index + 1}</span>
+                                <div>
+                                  <h4 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h4>
+                                  <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
+                                  <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
+                                    <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.era}</span>
+                                    <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>
+                                    {book.readCount > 1 && (
+                                      <span className="text-[#B89388] font-medium flex items-center gap-1">
+                                        <Icon name="rotate-ccw" className="w-3 h-3" /> Reread {book.readCount - 1}x
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
+                                <div className="text-right">
+                                  <span className="text-xs uppercase tracking-wider text-[#3E332E]/50 block">Elo Score</span>
+                                  <span className="font-mono text-sm font-semibold text-[#1A110E]">{book.eloRank}</span>
+                                </div>
+                                <button
+                                  onClick={() => handleReread(book.id)}
+                                  className="border border-[#3E332E]/30 px-3 py-1.5 rounded text-xs hover:bg-[#7A8D7B] hover:text-white transition-all flex items-center gap-1.5"
+                                >
+                                  <Icon name="rotate-ccw" className="w-3 h-3" />
+                                  <span>Log Reread</span>
+                                </button>
                               </div>
                             </div>
-                          </div>
-
-                          <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
-                            <div className="text-right">
-                              <span className="text-xs uppercase tracking-wider text-[#3E332E]/50 block">Elo Score</span>
-                              <span className="font-mono text-sm font-semibold text-[#1A110E]">{book.eloRank}</span>
-                            </div>
-                            <button
-                              onClick={() => handleReread(book.id)}
-                              className="border border-[#3E332E]/30 px-3 py-1.5 rounded text-xs hover:bg-[#7A8D7B] hover:text-white transition-all flex items-center gap-1.5"
-                            >
-                              <Icon name="rotate-ccw" className="w-3 h-3" />
-                              <span>Log Reread</span>
-                            </button>
-                          </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    )}
+
+                    {unrankedBooks.length > 0 && (
+                      <div className="space-y-4 pt-4">
+                        <h3 className="text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2">Unread / Unranked Corpus</h3>
+                        <div className="grid gap-4">
+                          {unrankedBooks.map((book) => (
+                            <div
+                              key={book.id}
+                              className="bg-[#F5F2EB]/30 border border-[#3E332E]/10 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                            >
+                              <div>
+                                <h4 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h4>
+                                <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
+                                <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
+                                  <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.era}</span>
+                                  <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => handleFirstRead(book.id)}
+                                className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors"
+                              >
+                                Log Read
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {activeTab === 'duel' && duelPair.length === 2 && (
+                {activeTab === 'duel' && (
                   <div className="max-w-3xl mx-auto space-y-8 animate-fadeIn text-center">
                     <div>
                       <h2 className="text-3xl font-serif text-[#1A110E]">Corpus Duels</h2>
                       <p className="text-sm text-[#3E332E]/70 italic mt-1">Calibrate your relative ranking stack between foundational texts.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 my-8">
-                      {duelPair.map((book, idx) => (
-                        <div
-                          key={book.id}
-                          onClick={() => handleDuelChoice(book, duelPair[1 - idx])}
-                          className="bg-[#F5F2EB] border-2 border-[#3E332E]/20 hover:border-[#7A8D7B] rounded-xl p-6 cursor-pointer transition-all shadow-md flex flex-col items-center group"
-                        >
-                          <h3 className="font-serif text-xl text-[#1A110E] font-medium mb-2">{book.title}</h3>
-                          <p className="text-sm text-[#3E332E]/70 mb-3">by {book.author}</p>
-                          <p className="text-xs text-[#3E332E]/60 italic line-clamp-2 mb-4 bg-[#FDFBF7] p-2 rounded border border-[#3E332E]/10">"{book.description}"</p>
-                          <button className="mt-auto bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase group-hover:bg-[#7A8D7B] transition-colors">
-                            Prefer This Text
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                    {duelPair.length === 2 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 my-8">
+                        {duelPair.map((book, idx) => (
+                          <div
+                            key={book.id}
+                            onClick={() => handleDuelChoice(book, duelPair[1 - idx])}
+                            className="bg-[#F5F2EB] border-2 border-[#3E332E]/20 hover:border-[#7A8D7B] rounded-xl p-6 cursor-pointer transition-all shadow-md flex flex-col items-center group"
+                          >
+                            <h3 className="font-serif text-xl text-[#1A110E] font-medium mb-2">{book.title}</h3>
+                            <p className="text-sm text-[#3E332E]/70 mb-3">by {book.author}</p>
+                            <p className="text-xs text-[#3E332E]/60 italic line-clamp-2 mb-4 bg-[#FDFBF7] p-2 rounded border border-[#3E332E]/10">"{book.description}"</p>
+                            <button className="mt-auto bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase group-hover:bg-[#7A8D7B] transition-colors">
+                              Prefer This Text
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-xl p-8 my-12">
+                        <p className="font-serif italic text-lg text-[#3E332E]/80">Log at least two reads in the stack to begin dueling.</p>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {activeTab === 'profile' && (
                   <div className="space-y-8 animate-fadeIn">
                     <div className="border-b border-[#3E332E]/15 pb-4">
-                      <h2 className="text-3xl font-serif text-[#1A110E]">Corpus Analytics</h2>
-                      <p className="text-sm text-[#3E332E]/70 italic">Restrained strictly to your connected Google Sheet.</p>
+                      <h2 className="text-3xl font-serif text-[#1A110E]">Reader Profile</h2>
+                      <p className="text-sm text-[#3E332E]/70 italic">Insights derived exclusively from your ranked corpus.</p>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-5 rounded-lg text-center">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Total Corpus Size</span>
-                        <span className="text-3xl font-serif text-[#1A110E]">{books.length}</span>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center">
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Country</span>
+                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteCountry}</span>
                       </div>
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-5 rounded-lg text-center">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Total Pages</span>
-                        <span className="text-3xl font-serif text-[#1A110E]">{totalPagesRead.toLocaleString()}</span>
+                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center">
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Author</span>
+                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteAuthor}</span>
                       </div>
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-5 rounded-lg text-center">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-1">Total Rereads</span>
-                        <span className="text-3xl font-serif text-[#1A110E]">{totalRereads}</span>
+                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center">
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Time Period</span>
+                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteDecade}</span>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {activeTab === 'social' && (
-                  <div className="space-y-8 animate-fadeIn">
+                {activeTab === 'dispatch' && (
+                  <div className="max-w-xl mx-auto space-y-8 animate-fadeIn">
                     <div className="border-b border-[#3E332E]/15 pb-4">
-                      <h2 className="text-3xl font-serif text-[#1A110E]">The Margins & Companions</h2>
-                      <p className="text-sm text-[#3E332E]/70 italic">Pass notes back and forth on your synced texts.</p>
+                      <h2 className="text-3xl font-serif text-[#1A110E]">Dispatch a Letter</h2>
+                      <p className="text-sm text-[#3E332E]/70 italic">Send a book and custom note directly via your email client.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-4">
-                        <h3 className="font-serif text-xl text-[#1A110E]">Connected Scholars</h3>
-                        <div className="space-y-3">
-                          {friends.map(friend => (
-                            <div key={friend.id} className="bg-[#FDFBF7] p-4 rounded-md border border-[#3E332E]/10 flex items-center justify-between">
-                              <div>
-                                <p className="font-medium text-[#1A110E]">{friend.name}</p>
-                                <p className="text-xs text-[#7A8D7B] font-semibold mt-0.5">{friend.attunement}</p>
-                              </div>
-                              <span className="text-xs text-[#3E332E]/60 italic">{friend.status}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 flex flex-col justify-between">
-                        <div>
-                          <h3 className="font-serif text-xl text-[#1A110E] mb-4">Corpus Margin Notes</h3>
-                          <div className="space-y-3 max-h-52 overflow-y-auto pr-1">
-                            {marginNotes.map(m => (
-                              <div key={m.id} className="bg-[#FDFBF7] p-3 rounded border border-[#3E332E]/10 text-sm">
-                                <div className="flex justify-between items-center text-xs text-[#3E332E]/50 mb-1">
-                                  <span className="font-semibold text-[#1A110E]">{m.user}</span>
-                                  <span>{m.time}</span>
-                                </div>
-                                <p className="italic text-[#3E332E]/90">"{m.note}"</p>
-                                <span className="text-[10px] text-[#7A8D7B] uppercase mt-1 block">Volume: {m.book}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="mt-4 space-y-2">
-                          <select
-                            value={selectedBookForNote}
-                            onChange={(e) => setSelectedBookForNote(e.target.value)}
-                            className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded px-2 py-1 text-xs text-[#1A110E]"
-                          >
-                            {books.map(b => (
-                              <option key={b.id} value={b.title}>{b.title}</option>
-                            ))}
-                          </select>
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              placeholder="Leave a note on this text..."
-                              value={newNoteInput}
-                              onChange={(e) => setNewNoteInput(e.target.value)}
-                              className="flex-1 bg-[#FDFBF7] border border-[#3E332E]/20 rounded px-3 py-1.5 text-sm text-[#1A110E]"
-                            />
-                            <button
-                              onClick={() => {
-                                if (!newNoteInput.trim()) return;
-                                setMarginNotes(prev => [
-                                  { id: Date.now().toString(), user: 'You', book: selectedBookForNote || books[0]?.title, note: newNoteInput, time: 'Just now' },
-                                  ...prev
-                                ]);
-                                setNewNoteInput('');
-                              }}
-                              className="bg-[#1A110E] text-[#FDFBF7] px-4 py-1.5 rounded text-xs hover:bg-[#7A8D7B]"
-                            >
-                              Inscribe
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'mail' && (
-                  <div className="space-y-8 animate-fadeIn">
-                    <div className="flex justify-between items-center border-b border-[#3E332E]/15 pb-4">
+                    <form onSubmit={handleDispatchMail} className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-4 shadow-sm">
                       <div>
-                        <h2 className="text-3xl font-serif text-[#1A110E]">Postal Mail & Letters</h2>
-                        <p className="text-sm text-[#3E332E]/70 italic">Dispatch wax-sealed notes on specific foundational volumes.</p>
+                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Select Book</label>
+                        <select
+                          value={dispatchBook}
+                          onChange={(e) => setDispatchBook(e.target.value)}
+                          className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
+                        >
+                          {books.map(b => (
+                            <option key={b.id} value={b.title}>{b.title} by {b.author}</option>
+                          ))}
+                        </select>
                       </div>
+
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Recipient Email Address</label>
+                        <input
+                          type="email"
+                          required
+                          placeholder="colleague@example.com"
+                          value={dispatchRecipient}
+                          onChange={(e) => setDispatchRecipient(e.target.value)}
+                          className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Personalized Message / Notes</label>
+                        <textarea
+                          rows="4"
+                          required
+                          placeholder="Write your reflections or thoughts on this text..."
+                          value={dispatchMessage}
+                          onChange={(e) => setDispatchMessage(e.target.value)}
+                          className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
+                        ></textarea>
+                      </div>
+
                       <button
-                        onClick={() => setIsWritingLetter(true)}
-                        className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase flex items-center gap-2 hover:bg-[#7A8D7B]"
+                        type="submit"
+                        className="w-full bg-[#1A110E] text-[#FDFBF7] py-2.5 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center justify-center gap-2"
                       >
-                        <Icon name="mail" className="w-4 h-4" />
-                        <span>Dispatch Letter</span>
+                        <Icon name="send" className="w-4 h-4" />
+                        <span>Open Mail Client to Dispatch</span>
                       </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {letters.map((letter) => (
-                        <div key={letter.id} className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-4 shadow-sm relative overflow-hidden">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <span className="text-[10px] uppercase tracking-widest bg-[#7A8D7B]/20 text-[#3E332E] px-2 py-0.5 rounded">
-                                From {letter.sender} to {letter.recipient}
-                              </span>
-                              <h4 className="font-serif text-xl text-[#1A110E] mt-2">{letter.bookTitle}</h4>
-                            </div>
-                            <span className="text-xs text-[#3E332E]/50">{letter.date}</span>
-                          </div>
-
-                          <div className="bg-[#FDFBF7] p-4 rounded border border-[#3E332E]/10">
-                            <p className="font-serif italic text-sm text-[#3E332E]/90 leading-relaxed">"{letter.message}"</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'groups' && (
-                  <div className="space-y-8 animate-fadeIn">
-                    <div className="border-b border-[#3E332E]/15 pb-4">
-                      <h2 className="text-3xl font-serif text-[#1A110E]">Reading Guilds & Salons</h2>
-                      <p className="text-sm text-[#3E332E]/70 italic">Collective focus dedicated entirely to your 500 foundational works.</p>
-                    </div>
-
-                    <div className="space-y-6">
-                      {groups.map(group => (
-                        <div key={group.id} className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-6">
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <h3 className="font-serif text-2xl text-[#1A110E]">{group.name}</h3>
-                              <p className="text-sm text-[#3E332E]/80 mt-1">{group.description}</p>
-                            </div>
-                            <span className="font-serif text-lg text-[#1A110E]">{group.membersCount} Scholars</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    </form>
                   </div>
                 )}
               </main>
 
               <footer className="border-t border-[#3E332E]/15 bg-[#F5F2EB]/50 py-6 text-center text-xs text-[#3E332E]/60 font-serif">
-                <p>Marginalia — Synchronized with your Google Sheets 500 Foundational Texts Corpus.</p>
+                <p>Marginalia — Synchronized with your Google Sheets Corpus.</p>
               </footer>
             </div>
           );
