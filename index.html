@@ -48,7 +48,7 @@
           const [isLoading, setIsLoading] = useState(true);
 
           const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/10LcHUiSL2_GG_OyT18wyeFkJo3dzn0wU9o4QMq1Zdbw/export?format=csv";
-          const STORAGE_KEY = 'marginalia_corpus_state_v3';
+          const STORAGE_KEY = 'marginalia_corpus_state_v4';
 
           // Binary insertion duel state
           const [activeDuel, setActiveDuel] = useState(null);
@@ -75,32 +75,53 @@
             return () => document.removeEventListener('mousedown', handleClickOutside);
           }, []);
 
-          // Fetch and parse Google Sheet CSV safely — preserving all 501 items while filtering only literal header remnants
+          // Fetch and parse Google Sheet CSV safely — robust multi-line quote handling to prevent splitting artifacts
           useEffect(() => {
             fetch(SHEET_CSV_URL)
               .then(res => res.text())
               .then(csvText => {
-                const lines = csvText.split('\n');
-                const parseCSVLine = (text) => {
-                  const result = [];
-                  let current = '';
+                const parseCSV = (text) => {
+                  const rows = [];
+                  let currentRow = [];
+                  let currentCell = '';
                   let inQuotes = false;
+                  
                   for (let i = 0; i < text.length; i++) {
                     const char = text[i];
+                    const nextChar = text[i + 1];
+                    
                     if (char === '"') {
-                      inQuotes = !inQuotes;
+                      if (inQuotes && nextChar === '"') {
+                        currentCell += '"';
+                        i++;
+                      } else {
+                        inQuotes = !inQuotes;
+                      }
                     } else if (char === ',' && !inQuotes) {
-                      result.push(current.replace(/^"|"$/g, '').trim());
-                      current = '';
+                      currentRow.push(currentCell.trim());
+                      currentCell = '';
+                    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                      if (char === '\r' && nextChar === '\n') {
+                        i++;
+                      }
+                      currentRow.push(currentCell.trim());
+                      if (currentRow.some(cell => cell !== '')) {
+                        rows.push(currentRow);
+                      }
+                      currentRow = [];
+                      currentCell = '';
                     } else {
-                      current += char;
+                      currentCell += char;
                     }
                   }
-                  result.push(current.replace(/^"|"$/g, '').trim());
-                  return result;
+                  currentRow.push(currentCell.trim());
+                  if (currentRow.some(cell => cell !== '')) {
+                    rows.push(currentRow);
+                  }
+                  return rows;
                 };
 
-                const rows = lines.map(line => parseCSVLine(line));
+                const rows = parseCSV(csvText);
                 if (rows.length === 0) {
                   setIsLoading(false);
                   return;
@@ -108,13 +129,12 @@
 
                 const rawHeaders = rows[0].map(h => h.toLowerCase().trim());
 
-                const parsedBooks = rows.slice(1).filter((row, idx) => {
+                const parsedBooks = rows.slice(1).filter((row) => {
                   if (row.length === 0 || !row.some(cell => cell !== '')) return false;
                   
-                  // Specifically target only the exact redundant header/metadata artifact row if present
-                  const titleCell = (row[0] || '').toLowerCase();
-                  const authorCell = (row[1] || '').toLowerCase();
-                  if (idx === 0 && titleCell.includes('read 2021') && authorCell.includes('unknown author')) {
+                  // Filter out any anomalous rows containing standalone read metadata or fragments
+                  const joined = row.join(' ').toLowerCase();
+                  if (joined.includes('read 2021') || (joined.includes('unknown author') && row.length < 3)) {
                     return false;
                   }
                   
