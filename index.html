@@ -33,7 +33,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
         
         const Icon = ({ name, className = "w-4 h-4", ...props }) => {
           useEffect(() => {
@@ -49,19 +49,32 @@
 
           const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/10LcHUiSL2_GG_OyT18wyeFkJo3dzn0wU9o4QMq1Zdbw/export?format=csv";
 
-          // Binary insertion duel state for new reads or rereads
-          const [activeDuel, setActiveDuel] = useState(null); // { book, candidateList, low, high, mid }
+          // Binary insertion duel state
+          const [activeDuel, setActiveDuel] = useState(null);
           
-          // Dispatch state
-          const [dispatchBook, setDispatchBook] = useState('');
+          // Dispatch state with autocomplete
+          const [dispatchQuery, setDispatchQuery] = useState('');
+          const [dispatchSelectedBook, setDispatchSelectedBook] = useState(null);
+          const [showDropdown, setShowDropdown] = useState(false);
           const [dispatchRecipient, setDispatchRecipient] = useState('');
           const [dispatchMessage, setDispatchMessage] = useState('');
+          const dropdownRef = useRef(null);
 
           useEffect(() => {
             if (window.lucide) window.lucide.createIcons();
           });
 
-          // Fetch and parse Google Sheet CSV
+          useEffect(() => {
+            const handleClickOutside = (e) => {
+              if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setShowDropdown(false);
+              }
+            };
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+          }, []);
+
+          // Fetch and parse Google Sheet CSV safely
           useEffect(() => {
             fetch(SHEET_CSV_URL)
               .then(res => res.text())
@@ -87,25 +100,33 @@
                 };
 
                 const rows = lines.map(line => parseCSVLine(line));
-                const headers = rows[0].map(h => h.toLowerCase());
+                if (rows.length === 0) {
+                  setIsLoading(false);
+                  return;
+                }
+
+                const headers = rows[0].map(h => h.toLowerCase().trim());
                 
-                const parsedBooks = rows.slice(1).filter(row => row.length >= headers.length && row[0]).map((row, idx) => {
-                  const getCol = (name) => {
-                    const i = headers.indexOf(name);
-                    return i !== -1 ? row[i] : '';
+                const parsedBooks = rows.slice(1).filter(row => row.length > 0 && row.some(cell => cell !== '')).map((row, idx) => {
+                  const getCol = (names) => {
+                    for (let name of names) {
+                      const i = headers.indexOf(name);
+                      if (i !== -1 && row[i] !== undefined && row[i] !== '') return row[i];
+                    }
+                    return '';
                   };
                   
-                  const title = getCol('title') || 'Untitled Text';
-                  const author = getCol('author') || 'Unknown Author';
-                  const era = getCol('era') || '';
-                  const country = getCol('country') || '';
-                  const description = getCol('description') || 'Foundational text item.';
+                  const title = getCol(['title']) || 'Untitled Text';
+                  const author = getCol(['author']) || 'Unknown Author';
+                  const timePeriod = getCol(['time period', 'time_period', 'era', 'period']) || 'Global';
+                  const country = getCol(['country', 'region', 'nation']) || 'Global';
+                  const description = getCol(['description', 'summary']) || 'Foundational text item.';
 
                   return {
                     id: `sheet-${idx}`,
                     title,
                     author,
-                    era,
+                    timePeriod,
                     country,
                     eloRank: null,
                     readCount: 0,
@@ -115,7 +136,10 @@
                 });
 
                 setBooks(parsedBooks);
-                if (parsedBooks.length > 0) setDispatchBook(parsedBooks[0].title);
+                if (parsedBooks.length > 0) {
+                  setDispatchSelectedBook(parsedBooks[0]);
+                  setDispatchQuery(`${parsedBooks[0].title} — ${parsedBooks[0].author}`);
+                }
                 setIsLoading(false);
               })
               .catch(err => {
@@ -127,14 +151,11 @@
           const rankedBooks = books.filter(b => b.eloRank !== null).sort((a, b) => b.eloRank - a.eloRank);
           const unrankedBooks = books.filter(b => b.eloRank === null);
 
-          // Start binary insertion placement
           const startBinaryDuel = (targetBook, currentRanked) => {
             if (currentRanked.length === 0) {
-              // First item in the entire stack gets default rank 1500
               setBooks(prev => prev.map(b => b.id === targetBook.id ? { ...b, eloRank: 1500, readCount: b.readCount + 1 } : b));
               return;
             }
-            // Initialize binary search between 0 and currentRanked.length - 1
             setActiveDuel({
               book: targetBook,
               list: currentRanked,
@@ -150,7 +171,6 @@
 
             const currentRanked = books.filter(b => b.eloRank !== null).sort((a, b) => b.eloRank - a.eloRank);
             
-            // Mark read count
             setBooks(prev => prev.map(b => b.id === id ? { ...b, readCount: 1 } : b));
 
             if (currentRanked.length === 0) {
@@ -172,27 +192,22 @@
               return b;
             }));
 
-            // For rereads, remove it temporarily from ranked list to re-evaluate position via binary search
             const currentRanked = books.filter(b => b.eloRank !== null && b.id !== id).sort((a, b) => b.eloRank - a.eloRank);
             if (currentRanked.length > 0) {
               startBinaryDuel(target, currentRanked);
             }
           };
 
-          // Handle choice in binary search duel: does user prefer 'target' over 'peer'?
           const handleDuelResponse = (preferTarget) => {
             if (!activeDuel) return;
             const { book, list, low, high, mid } = activeDuel;
-            const peer = list[mid];
 
             let newLow = low;
             let newHigh = high;
 
             if (preferTarget) {
-              // Target is better than peer, so it belongs higher up (lower index in sorted array)
               newHigh = mid - 1;
             } else {
-              // Target is worse than peer, so it belongs lower down (higher index)
               newLow = mid + 1;
             }
 
@@ -200,14 +215,11 @@
               const nextMid = Math.floor((newLow + newHigh) / 2);
               setActiveDuel({ ...activeDuel, low: newLow, high: newHigh, mid: nextMid });
             } else {
-              // Binary search complete! Compute new elo rank based on insertion position
               const insertIndex = preferTarget ? mid : mid + 1;
               
-              // Recalculate elos neatly based on surrounding ranked items
               setBooks(prev => {
                 const updated = prev.map(b => {
                   if (b.id === book.id) {
-                    // Assign temporary elo based on index position
                     const above = list[insertIndex - 1];
                     const below = list[insertIndex];
                     let newElo = 1500;
@@ -229,7 +241,7 @@
             let content = `# Marginalia Sanctuary Journal\n\n`;
             content += `## Ranked Stack (${rankedBooks.length} Texts)\n`;
             rankedBooks.forEach((b, i) => {
-              content += `${i + 1}. **${b.title}** by ${b.author} (${b.era}, ${b.country}) - Elo: ${b.eloRank}\n`;
+              content += `${i + 1}. **${b.title}** by ${b.author} (${b.timePeriod}, ${b.country}) - Elo: ${b.eloRank}\n`;
             });
 
             const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
@@ -242,8 +254,9 @@
 
           const handleDispatchMail = (e) => {
             e.preventDefault();
-            const subject = encodeURIComponent(`A Foundational Text Dispatch: ${dispatchBook}`);
-            const body = encodeURIComponent(`Hello,\n\nI am sharing a foundational text with you from The 500 corpus:\n\nTitle: ${dispatchBook}\n\nNote:\n${dispatchMessage}\n\n— Sent via Marginalia`);
+            const bookTitle = dispatchSelectedBook ? dispatchSelectedBook.title : dispatchQuery;
+            const subject = encodeURIComponent(`A Foundational Text Dispatch: ${bookTitle}`);
+            const body = encodeURIComponent(`Hello,\n\nI am sharing a foundational text with you from The 500 corpus:\n\nTitle: ${bookTitle}\n\nNote:\n${dispatchMessage}\n\n— Sent via Marginalia`);
             window.location.href = `mailto:${dispatchRecipient}?subject=${subject}&body=${body}`;
           };
 
@@ -251,7 +264,7 @@
             if (rankedBooks.length === 0) return 'None yet';
             const counts = {};
             rankedBooks.forEach(b => {
-              let val = b[key];
+              const val = b[key];
               if (val) counts[val] = (counts[val] || 0) + 1;
             });
             let topVal = 'None';
@@ -266,8 +279,13 @@
           };
 
           const favoriteCountry = getFavoriteMetric('country');
+          const favoriteTimePeriod = getFavoriteMetric('timePeriod');
           const favoriteAuthor = getFavoriteMetric('author');
-          const favoriteEra = getFavoriteMetric('era');
+
+          const filteredDispatchBooks = books.filter(b => 
+            b.title.toLowerCase().includes(dispatchQuery.toLowerCase()) || 
+            b.author.toLowerCase().includes(dispatchQuery.toLowerCase())
+          );
 
           if (isLoading) {
             return (
@@ -329,10 +347,16 @@
                             <span className="text-[10px] uppercase tracking-wider text-[#7A8D7B] block mb-1">New Log / Reread</span>
                             <h4 className="font-serif text-lg text-[#1A110E] font-medium">{activeDuel.book.title}</h4>
                             <p className="text-xs text-[#3E332E]/70 mt-1">by {activeDuel.book.author}</p>
+                            <div className="flex items-center justify-center gap-2 mt-2 text-[11px] text-[#3E332E]/60">
+                              <span>{activeDuel.book.country}</span>
+                              <span>•</span>
+                              <span>{activeDuel.book.timePeriod}</span>
+                            </div>
                           </div>
                           <button
+                            type="button"
                             onClick={() => handleDuelResponse(true)}
-                            className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors"
+                            className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors cursor-pointer"
                           >
                             Prefer This
                           </button>
@@ -343,10 +367,16 @@
                             <span className="text-[10px] uppercase tracking-wider text-[#3E332E]/50 block mb-1">Ranked Benchmark</span>
                             <h4 className="font-serif text-lg text-[#1A110E] font-medium">{activeDuel.list[activeDuel.mid].title}</h4>
                             <p className="text-xs text-[#3E332E]/70 mt-1">by {activeDuel.list[activeDuel.mid].author}</p>
+                            <div className="flex items-center justify-center gap-2 mt-2 text-[11px] text-[#3E332E]/60">
+                              <span>{activeDuel.list[activeDuel.mid].country}</span>
+                              <span>•</span>
+                              <span>{activeDuel.list[activeDuel.mid].timePeriod}</span>
+                            </div>
                           </div>
                           <button
+                            type="button"
                             onClick={() => handleDuelResponse(false)}
-                            className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors"
+                            className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors cursor-pointer"
                           >
                             Prefer This
                           </button>
@@ -378,8 +408,8 @@
                                   <h4 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h4>
                                   <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
                                   <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
-                                    {book.era && <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.era}</span>}
-                                    {book.country && <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>}
+                                    <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10 font-medium">{book.country}</span>
+                                    <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10 font-medium">{book.timePeriod}</span>
                                     {book.readCount > 1 && (
                                       <span className="text-[#B89388] font-medium flex items-center gap-1">
                                         <Icon name="rotate-ccw" className="w-3 h-3" /> Reread {book.readCount - 1}x
@@ -395,8 +425,9 @@
                                   <span className="font-mono text-sm font-semibold text-[#1A110E]">{book.eloRank}</span>
                                 </div>
                                 <button
+                                  type="button"
                                   onClick={() => handleReread(book.id)}
-                                  className="border border-[#3E332E]/30 px-3 py-1.5 rounded text-xs hover:bg-[#7A8D7B] hover:text-white transition-all flex items-center gap-1.5"
+                                  className="border border-[#3E332E]/30 px-3 py-1.5 rounded text-xs hover:bg-[#7A8D7B] hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
                                 >
                                   <Icon name="rotate-ccw" className="w-3 h-3" />
                                   <span>Log Reread</span>
@@ -421,14 +452,15 @@
                                 <h4 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h4>
                                 <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
                                 <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
-                                  {book.era && <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.era}</span>}
-                                  {book.country && <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>}
+                                  <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10 font-medium">{book.country}</span>
+                                  <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10 font-medium">{book.timePeriod}</span>
                                 </div>
                               </div>
 
                               <button
+                                type="button"
                                 onClick={() => handleFirstRead(book.id)}
-                                className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors"
+                                className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors cursor-pointer"
                               >
                                 Log Read
                               </button>
@@ -453,12 +485,12 @@
                         <span className="text-2xl font-serif text-[#1A110E]">{favoriteCountry}</span>
                       </div>
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Author</span>
-                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteAuthor}</span>
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Time Period</span>
+                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteTimePeriod}</span>
                       </div>
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Time Period</span>
-                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteEra}</span>
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Author</span>
+                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteAuthor}</span>
                       </div>
                     </div>
                   </div>
@@ -472,17 +504,45 @@
                     </div>
 
                     <form onSubmit={handleDispatchMail} className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-4 shadow-sm">
-                      <div>
-                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Select Book</label>
-                        <select
-                          value={dispatchBook}
-                          onChange={(e) => setDispatchBook(e.target.value)}
+                      <div className="relative" ref={dropdownRef}>
+                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Search & Select Book</label>
+                        <input
+                          type="text"
+                          value={dispatchQuery}
+                          onChange={(e) => {
+                            setDispatchQuery(e.target.value);
+                            setShowDropdown(true);
+                          }}
+                          onFocus={() => setShowDropdown(true)}
+                          placeholder="Type title or author..."
                           className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
-                        >
-                          {books.map(b => (
-                            <option key={b.id} value={b.title}>{b.title} by {b.author}</option>
-                          ))}
-                        </select>
+                          required
+                        />
+
+                        {showDropdown && filteredDispatchBooks.length > 0 && (
+                          <div className="absolute z-20 left-0 right-0 mt-1 bg-[#FDFBF7] border border-[#3E332E]/20 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {filteredDispatchBooks.map(b => (
+                              <div
+                                key={b.id}
+                                onClick={() => {
+                                  setDispatchSelectedBook(b);
+                                  setDispatchQuery(`${b.title} — ${b.author}`);
+                                  setShowDropdown(false);
+                                }}
+                                className="p-3 hover:bg-[#F5F2EB] cursor-pointer border-b border-[#3E332E]/5 last:border-b-0 text-left"
+                              >
+                                <div className="font-medium text-[#1A110E] text-sm">{b.title}</div>
+                                <div className="text-xs text-[#3E332E]/70 flex items-center gap-2 mt-0.5">
+                                  <span>by {b.author}</span>
+                                  <span>•</span>
+                                  <span>{b.country}</span>
+                                  <span>•</span>
+                                  <span>{b.timePeriod}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -511,7 +571,7 @@
 
                       <button
                         type="submit"
-                        className="w-full bg-[#1A110E] text-[#FDFBF7] py-2.5 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center justify-center gap-2"
+                        className="w-full bg-[#1A110E] text-[#FDFBF7] py-2.5 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <Icon name="send" className="w-4 h-4" />
                         <span>Open Mail Client to Dispatch</span>
