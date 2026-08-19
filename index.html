@@ -48,6 +48,7 @@
           const [isLoading, setIsLoading] = useState(true);
 
           const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/10LcHUiSL2_GG_OyT18wyeFkJo3dzn0wU9o4QMq1Zdbw/export?format=csv";
+          const STORAGE_KEY = 'marginalia_corpus_state_v1';
 
           // Binary insertion duel state
           const [activeDuel, setActiveDuel] = useState(null);
@@ -74,7 +75,7 @@
             return () => document.removeEventListener('mousedown', handleClickOutside);
           }, []);
 
-          // Fetch and parse Google Sheet CSV safely with flexible column detection
+          // Fetch and parse Google Sheet CSV safely with localStorage persistence synchronization
           useEffect(() => {
             fetch(SHEET_CSV_URL)
               .then(res => res.text())
@@ -105,9 +106,7 @@
                   return;
                 }
 
-                // First row as header
                 const rawHeaders = rows[0].map(h => h.toLowerCase().trim());
-                console.log("Detected CSV Headers:", rawHeaders);
 
                 const parsedBooks = rows.slice(1).filter(row => row.length > 0 && row.some(cell => cell !== '')).map((row, idx) => {
                   const getColVal = (possibleNames) => {
@@ -117,7 +116,6 @@
                         return row[index];
                       }
                     }
-                    // Fallback search by includes if exact header match fails
                     for (let name of possibleNames) {
                       const index = rawHeaders.findIndex(h => h.includes(name));
                       if (index !== -1 && row[index] !== undefined && row[index] !== '') {
@@ -127,7 +125,6 @@
                     return '';
                   };
 
-                  // Fallback to positional mapping if headers are sparse or unnamed
                   const title = getColVal(['title', 'work', 'text', 'book']) || row[0] || 'Untitled Text';
                   const author = getColVal(['author', 'writer', 'creator']) || row[1] || 'Unknown Author';
                   const timePeriod = getColVal(['time period', 'time_period', 'era', 'period', 'century', 'date']) || row[2] || 'Global';
@@ -147,11 +144,36 @@
                   };
                 });
 
-                console.log("Parsed Books Corpus:", parsedBooks);
-                setBooks(parsedBooks);
-                if (parsedBooks.length > 0) {
-                  setDispatchSelectedBook(parsedBooks[0]);
-                  setDispatchQuery(`${parsedBooks[0].title} — ${parsedBooks[0].author}`);
+                // Merge with saved localStorage state if available
+                const savedState = localStorage.getItem(STORAGE_KEY);
+                if (savedState) {
+                  try {
+                    const savedBooksMap = JSON.parse(savedState);
+                    const mergedBooks = parsedBooks.map(book => {
+                      if (savedBooksMap[book.id]) {
+                        return { ...book, ...savedBooksMap[book.id] };
+                      }
+                      return book;
+                    });
+                    setBooks(mergedBooks);
+                    if (mergedBooks.length > 0) {
+                      setDispatchSelectedBook(mergedBooks[0]);
+                      setDispatchQuery(`${mergedBooks[0].title} — ${mergedBooks[0].author}`);
+                    }
+                  } catch (e) {
+                    console.error("Error parsing localStorage state:", e);
+                    setBooks(parsedBooks);
+                    if (parsedBooks.length > 0) {
+                      setDispatchSelectedBook(parsedBooks[0]);
+                      setDispatchQuery(`${parsedBooks[0].title} — ${parsedBooks[0].author}`);
+                    }
+                  }
+                } else {
+                  setBooks(parsedBooks);
+                  if (parsedBooks.length > 0) {
+                    setDispatchSelectedBook(parsedBooks[0]);
+                    setDispatchQuery(`${parsedBooks[0].title} — ${parsedBooks[0].author}`);
+                  }
                 }
                 setIsLoading(false);
               })
@@ -160,6 +182,21 @@
                 setIsLoading(false);
               });
           }, []);
+
+          // Save state changes to localStorage whenever books state updates
+          useEffect(() => {
+            if (books.length > 0 && !isLoading) {
+              const booksMap = {};
+              books.forEach(b => {
+                booksMap[b.id] = {
+                  eloRank: b.eloRank,
+                  readCount: b.readCount,
+                  rereadDates: b.rereadDates
+                };
+              });
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(booksMap));
+            }
+          }, [books, isLoading]);
 
           const rankedBooks = books.filter(b => b.eloRank !== null).sort((a, b) => b.eloRank - a.eloRank);
           const unrankedBooks = books.filter(b => b.eloRank === null);
