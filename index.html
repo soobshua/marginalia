@@ -49,7 +49,8 @@
 
           const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/10LcHUiSL2_GG_OyT18wyeFkJo3dzn0wU9o4QMq1Zdbw/export?format=csv";
 
-          const [duelPair, setDuelPair] = useState([]);
+          // Binary insertion duel state for new reads or rereads
+          const [activeDuel, setActiveDuel] = useState(null); // { book, candidateList, low, high, mid }
           
           // Dispatch state
           const [dispatchBook, setDispatchBook] = useState('');
@@ -66,7 +67,6 @@
               .then(res => res.text())
               .then(csvText => {
                 const lines = csvText.split('\n');
-                // Basic CSV line parser handling quoted commas if present
                 const parseCSVLine = (text) => {
                   const result = [];
                   let current = '';
@@ -99,10 +99,7 @@
                   const author = getCol('author') || 'Unknown Author';
                   const era = getCol('era') || '';
                   const country = getCol('country') || '';
-                  const yr = parseInt(getCol('year')) || 1900;
                   const description = getCol('description') || 'Foundational text item.';
-                  
-                  const decadeStr = `${Math.floor(yr / 10) * 10}s`;
 
                   return {
                     id: `sheet-${idx}`,
@@ -110,8 +107,6 @@
                     author,
                     era,
                     country,
-                    year: yr,
-                    decade: decadeStr,
                     eloRank: null,
                     readCount: 0,
                     rereadDates: [],
@@ -132,41 +127,44 @@
           const rankedBooks = books.filter(b => b.eloRank !== null).sort((a, b) => b.eloRank - a.eloRank);
           const unrankedBooks = books.filter(b => b.eloRank === null);
 
-          useEffect(() => {
-            if (rankedBooks.length >= 2 && duelPair.length === 0) {
-              triggerRandomDuel(rankedBooks);
-            }
-          }, [books]);
-
-          const triggerRandomDuel = (currentRanked = rankedBooks) => {
-            if (currentRanked.length < 2) {
-              setDuelPair([]);
+          // Start binary insertion placement
+          const startBinaryDuel = (targetBook, currentRanked) => {
+            if (currentRanked.length === 0) {
+              // First item in the entire stack gets default rank 1500
+              setBooks(prev => prev.map(b => b.id === targetBook.id ? { ...b, eloRank: 1500, readCount: b.readCount + 1 } : b));
               return;
             }
-            const shuffled = [...currentRanked].sort(() => 0.5 - Math.random());
-            setDuelPair([shuffled[0], shuffled[1]]);
+            // Initialize binary search between 0 and currentRanked.length - 1
+            setActiveDuel({
+              book: targetBook,
+              list: currentRanked,
+              low: 0,
+              high: currentRanked.length - 1,
+              mid: Math.floor((0 + currentRanked.length - 1) / 2)
+            });
           };
 
           const handleFirstRead = (id) => {
-            setBooks(prev => {
-              const updated = prev.map(b => {
-                if (b.id === id) {
-                  return { ...b, eloRank: 1500, readCount: 1 };
-                }
-                return b;
-              });
-              
-              const newRanked = updated.filter(b => b.eloRank !== null);
-              if (newRanked.length >= 2 && duelPair.length === 0) {
-                const shuffled = [...newRanked].sort(() => 0.5 - Math.random());
-                setDuelPair([shuffled[0], shuffled[1]]);
-              }
-              return updated;
-            });
+            const target = books.find(b => b.id === id);
+            if (!target) return;
+
+            const currentRanked = books.filter(b => b.eloRank !== null).sort((a, b) => b.eloRank - a.eloRank);
+            
+            // Mark read count
+            setBooks(prev => prev.map(b => b.id === id ? { ...b, readCount: 1 } : b));
+
+            if (currentRanked.length === 0) {
+              setBooks(prev => prev.map(b => b.id === id ? { ...b, eloRank: 1500 } : b));
+            } else {
+              startBinaryDuel(target, currentRanked);
+            }
           };
 
           const handleReread = (id) => {
             const today = new Date().toISOString().split('T')[0];
+            const target = books.find(b => b.id === id);
+            if (!target) return;
+
             setBooks(prev => prev.map(b => {
               if (b.id === id) {
                 return { ...b, readCount: b.readCount + 1, rereadDates: [...b.rereadDates, today] };
@@ -174,52 +172,64 @@
               return b;
             }));
 
-            const targetBook = books.find(b => b.id === id);
-            if (targetBook && targetBook.eloRank !== null) {
-              const peers = rankedBooks.filter(b => b.id !== id);
-              if (peers.length > 0) {
-                const randomPeer = peers[Math.floor(Math.random() * peers.length)];
-                setDuelPair([targetBook, randomPeer]);
-                setActiveTab('duel');
-              }
+            // For rereads, remove it temporarily from ranked list to re-evaluate position via binary search
+            const currentRanked = books.filter(b => b.eloRank !== null && b.id !== id).sort((a, b) => b.eloRank - a.eloRank);
+            if (currentRanked.length > 0) {
+              startBinaryDuel(target, currentRanked);
             }
           };
 
-          const handleDuelChoice = (winner, loser) => {
-            const K = 32;
-            const expectedWinner = 1 / (1 + Math.pow(10, (loser.eloRank - winner.eloRank) / 400));
-            const expectedLoser = 1 / (1 + Math.pow(10, (winner.eloRank - loser.eloRank) / 400));
+          // Handle choice in binary search duel: does user prefer 'target' over 'peer'?
+          const handleDuelResponse = (preferTarget) => {
+            if (!activeDuel) return;
+            const { book, list, low, high, mid } = activeDuel;
+            const peer = list[mid];
 
-            const newWinnerRank = Math.round(winner.eloRank + K * (1 - expectedWinner));
-            const newLoserRank = Math.round(loser.eloRank + K * (0 - expectedLoser));
+            let newLow = low;
+            let newHigh = high;
 
-            setBooks(prev => prev.map(b => {
-              if (b.id === winner.id) return { ...b, eloRank: newWinnerRank };
-              if (b.id === loser.id) return { ...b, eloRank: newLoserRank };
-              return b;
-            }));
+            if (preferTarget) {
+              // Target is better than peer, so it belongs higher up (lower index in sorted array)
+              newHigh = mid - 1;
+            } else {
+              // Target is worse than peer, so it belongs lower down (higher index)
+              newLow = mid + 1;
+            }
 
-            setTimeout(() => {
-              const currentRanked = books.map(b => {
-                if (b.id === winner.id) return { ...b, eloRank: newWinnerRank };
-                if (b.id === loser.id) return { ...b, eloRank: newLoserRank };
-                return b;
-              }).filter(b => b.eloRank !== null);
+            if (newLow <= newHigh) {
+              const nextMid = Math.floor((newLow + newHigh) / 2);
+              setActiveDuel({ ...activeDuel, low: newLow, high: newHigh, mid: nextMid });
+            } else {
+              // Binary search complete! Compute new elo rank based on insertion position
+              const insertIndex = preferTarget ? mid : mid + 1;
               
-              if (currentRanked.length >= 2) {
-                const shuffled = [...currentRanked].sort(() => 0.5 - Math.random());
-                setDuelPair([shuffled[0], shuffled[1]]);
-              } else {
-                setDuelPair([]);
-              }
-            }, 100);
+              // Recalculate elos neatly based on surrounding ranked items
+              setBooks(prev => {
+                const updated = prev.map(b => {
+                  if (b.id === book.id) {
+                    // Assign temporary elo based on index position
+                    const above = list[insertIndex - 1];
+                    const below = list[insertIndex];
+                    let newElo = 1500;
+                    if (above && below) newElo = Math.round((above.eloRank + below.eloRank) / 2);
+                    else if (above) newElo = above.eloRank - 20;
+                    else if (below) newElo = below.eloRank + 20;
+                    return { ...b, eloRank: newElo };
+                  }
+                  return b;
+                });
+                return updated;
+              });
+
+              setActiveDuel(null);
+            }
           };
 
           const exportJournal = () => {
             let content = `# Marginalia Sanctuary Journal\n\n`;
             content += `## Ranked Stack (${rankedBooks.length} Texts)\n`;
             rankedBooks.forEach((b, i) => {
-              content += `${i + 1}. **${b.title}** by ${b.author} (${b.era || b.decade}, ${b.country}) - Elo: ${b.eloRank}\n`;
+              content += `${i + 1}. **${b.title}** by ${b.author} (${b.era}, ${b.country}) - Elo: ${b.eloRank}\n`;
             });
 
             const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
@@ -242,7 +252,6 @@
             const counts = {};
             rankedBooks.forEach(b => {
               let val = b[key];
-              if (key === 'era' && !val) val = b.decade;
               if (val) counts[val] = (counts[val] || 0) + 1;
             });
             let topVal = 'None';
@@ -279,7 +288,6 @@
                 <nav className="hidden md:flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner">
                   {[
                     { id: 'stack', label: 'Ranking Stack', icon: 'book-open' },
-                    { id: 'duel', label: 'Duels', icon: 'flame' },
                     { id: 'profile', label: 'Reader Profile', icon: 'compass' },
                     { id: 'dispatch', label: 'Dispatch Letter', icon: 'send' },
                   ].map((tab) => (
@@ -306,6 +314,48 @@
               </header>
 
               <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+                {activeDuel && (
+                  <div className="fixed inset-0 bg-[#3E332E]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn">
+                    <div className="bg-[#FDFBF7] border border-[#3E332E]/20 rounded-xl max-w-xl w-full p-6 sm:p-8 shadow-2xl space-y-6 text-center">
+                      <div>
+                        <span className="text-xs uppercase tracking-wider text-[#7A8D7B] font-semibold">Corpus Calibration</span>
+                        <h3 className="text-2xl font-serif text-[#1A110E] mt-1">Comparing Texts</h3>
+                        <p className="text-sm text-[#3E332E]/70 italic mt-1">Where does <strong className="text-[#1A110E] font-medium">"{activeDuel.book.title}"</strong> stand relative to your stack?</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
+                        <div className="bg-[#F5F2EB] border-2 border-[#7A8D7B] rounded-lg p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wider text-[#7A8D7B] block mb-1">New Log / Reread</span>
+                            <h4 className="font-serif text-lg text-[#1A110E] font-medium">{activeDuel.book.title}</h4>
+                            <p className="text-xs text-[#3E332E]/70 mt-1">by {activeDuel.book.author}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDuelResponse(true)}
+                            className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors"
+                          >
+                            Prefer This
+                          </button>
+                        </div>
+
+                        <div className="bg-[#F5F2EB] border-2 border-[#3E332E]/20 rounded-lg p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wider text-[#3E332E]/50 block mb-1">Ranked Benchmark</span>
+                            <h4 className="font-serif text-lg text-[#1A110E] font-medium">{activeDuel.list[activeDuel.mid].title}</h4>
+                            <p className="text-xs text-[#3E332E]/70 mt-1">by {activeDuel.list[activeDuel.mid].author}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDuelResponse(false)}
+                            className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors"
+                          >
+                            Prefer This
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {activeTab === 'stack' && (
                   <div className="space-y-8 animate-fadeIn">
                     <div>
@@ -385,38 +435,6 @@
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {activeTab === 'duel' && (
-                  <div className="max-w-3xl mx-auto space-y-8 animate-fadeIn text-center">
-                    <div>
-                      <h2 className="text-3xl font-serif text-[#1A110E]">Corpus Duels</h2>
-                      <p className="text-sm text-[#3E332E]/70 italic mt-1">Calibrate your relative ranking stack between foundational texts.</p>
-                    </div>
-
-                    {duelPair.length === 2 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 my-8">
-                        {duelPair.map((book, idx) => (
-                          <div
-                            key={book.id}
-                            onClick={() => handleDuelChoice(book, duelPair[1 - idx])}
-                            className="bg-[#F5F2EB] border-2 border-[#3E332E]/20 hover:border-[#7A8D7B] rounded-xl p-6 cursor-pointer transition-all shadow-md flex flex-col items-center group"
-                          >
-                            <h3 className="font-serif text-xl text-[#1A110E] font-medium mb-2">{book.title}</h3>
-                            <p className="text-sm text-[#3E332E]/70 mb-3">by {book.author}</p>
-                            <p className="text-xs text-[#3E332E]/60 italic line-clamp-2 mb-4 bg-[#FDFBF7] p-2 rounded border border-[#3E332E]/10">"{book.description}"</p>
-                            <button className="mt-auto bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase group-hover:bg-[#7A8D7B] transition-colors">
-                              Prefer This Text
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-xl p-8 my-12">
-                        <p className="font-serif italic text-lg text-[#3E332E]/80">Log at least two reads in the stack to begin dueling.</p>
                       </div>
                     )}
                   </div>
