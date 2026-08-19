@@ -108,7 +108,13 @@
 
                 const rawHeaders = rows[0].map(h => h.toLowerCase().trim());
 
-                const parsedBooks = rows.slice(1).filter(row => row.length > 0 && row.some(cell => cell !== '')).map((row, idx) => {
+                const parsedBooks = rows.slice(1).filter(row => {
+                  if (row.length === 0 || !row.some(cell => cell !== '')) return false;
+                  // Filter out ghost rows like "Read 2021 by Unknown Author Global Global"
+                  const joined = row.join(' ').toLowerCase();
+                  if (joined.includes('read 2021') || joined.includes('unknown author')) return false;
+                  return true;
+                }).map((row, idx) => {
                   const getColVal = (possibleNames) => {
                     for (let name of possibleNames) {
                       const index = rawHeaders.indexOf(name);
@@ -771,7 +777,7 @@
                               className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center gap-1.5 cursor-pointer"
                             >
                               <Icon name="rotate-ccw" className="w-3.5 h-3.5" />
-                              <span>I came to my sense and I want to read this</span>
+                              <span>I came to my senses and will read this.</span>
                             </button>
                           </div>
                         ))}
