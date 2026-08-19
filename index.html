@@ -74,7 +74,7 @@
             return () => document.removeEventListener('mousedown', handleClickOutside);
           }, []);
 
-          // Fetch and parse Google Sheet CSV safely
+          // Fetch and parse Google Sheet CSV safely with flexible column detection
           useEffect(() => {
             fetch(SHEET_CSV_URL)
               .then(res => res.text())
@@ -105,22 +105,34 @@
                   return;
                 }
 
-                const headers = rows[0].map(h => h.toLowerCase().trim());
-                
+                // First row as header
+                const rawHeaders = rows[0].map(h => h.toLowerCase().trim());
+                console.log("Detected CSV Headers:", rawHeaders);
+
                 const parsedBooks = rows.slice(1).filter(row => row.length > 0 && row.some(cell => cell !== '')).map((row, idx) => {
-                  const getCol = (names) => {
-                    for (let name of names) {
-                      const i = headers.indexOf(name);
-                      if (i !== -1 && row[i] !== undefined && row[i] !== '') return row[i];
+                  const getColVal = (possibleNames) => {
+                    for (let name of possibleNames) {
+                      const index = rawHeaders.indexOf(name);
+                      if (index !== -1 && row[index] !== undefined && row[index] !== '') {
+                        return row[index];
+                      }
+                    }
+                    // Fallback search by includes if exact header match fails
+                    for (let name of possibleNames) {
+                      const index = rawHeaders.findIndex(h => h.includes(name));
+                      if (index !== -1 && row[index] !== undefined && row[index] !== '') {
+                        return row[index];
+                      }
                     }
                     return '';
                   };
-                  
-                  const title = getCol(['title']) || 'Untitled Text';
-                  const author = getCol(['author']) || 'Unknown Author';
-                  const timePeriod = getCol(['time period', 'time_period', 'era', 'period']) || 'Global';
-                  const country = getCol(['country', 'region', 'nation']) || 'Global';
-                  const description = getCol(['description', 'summary']) || 'Foundational text item.';
+
+                  // Fallback to positional mapping if headers are sparse or unnamed
+                  const title = getColVal(['title', 'work', 'text', 'book']) || row[0] || 'Untitled Text';
+                  const author = getColVal(['author', 'writer', 'creator']) || row[1] || 'Unknown Author';
+                  const timePeriod = getColVal(['time period', 'time_period', 'era', 'period', 'century', 'date']) || row[2] || 'Global';
+                  const country = getColVal(['country', 'region', 'nation', 'origin']) || row[3] || 'Global';
+                  const description = getColVal(['description', 'summary', 'notes']) || row[4] || 'Foundational text item.';
 
                   return {
                     id: `sheet-${idx}`,
@@ -135,6 +147,7 @@
                   };
                 });
 
+                console.log("Parsed Books Corpus:", parsedBooks);
                 setBooks(parsedBooks);
                 if (parsedBooks.length > 0) {
                   setDispatchSelectedBook(parsedBooks[0]);
@@ -241,7 +254,7 @@
             let content = `# Marginalia Sanctuary Journal\n\n`;
             content += `## Ranked Stack (${rankedBooks.length} Texts)\n`;
             rankedBooks.forEach((b, i) => {
-              content += `${i + 1}. **${b.title}** by ${b.author} (${b.timePeriod}, ${b.country}) - Elo: ${b.eloRank}\n`;
+              content += `${i + 1}. **${b.title}** by ${b.author} (${b.country} • ${b.timePeriod}) - Elo: ${b.eloRank}\n`;
             });
 
             const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
@@ -402,14 +415,14 @@
                               key={book.id}
                               className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
                             >
-                              <div className="flex items-center gap-4">
-                                <span className="font-serif text-lg text-[#3E332E]/40 w-6 text-right">#{index + 1}</span>
+                              <div className="flex items-start gap-4">
+                                <span className="font-serif text-lg text-[#3E332E]/40 w-6 text-right pt-0.5">#{index + 1}</span>
                                 <div>
-                                  <h4 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h4>
-                                  <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
-                                  <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
-                                    <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10 font-medium">{book.country}</span>
-                                    <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10 font-medium">{book.timePeriod}</span>
+                                  <h4 className="font-serif text-lg text-[#1A110E] font-medium leading-snug">{book.title}</h4>
+                                  <p className="text-sm text-[#3E332E]/80 mt-0.5">by {book.author}</p>
+                                  <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-[#3E332E]/60">
+                                    <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.country}</span>
+                                    <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.timePeriod}</span>
                                     {book.readCount > 1 && (
                                       <span className="text-[#B89388] font-medium flex items-center gap-1">
                                         <Icon name="rotate-ccw" className="w-3 h-3" /> Reread {book.readCount - 1}x
@@ -441,7 +454,7 @@
 
                     {unrankedBooks.length > 0 && (
                       <div className="space-y-4 pt-4">
-                        <h3 className="text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2">Unread / Unranked Corpus</h3>
+                        <h3 className="text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2">Unread / Unranked Corpus ({unrankedBooks.length})</h3>
                         <div className="grid gap-4">
                           {unrankedBooks.map((book) => (
                             <div
@@ -449,11 +462,11 @@
                               className="bg-[#F5F2EB]/30 border border-[#3E332E]/10 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
                             >
                               <div>
-                                <h4 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h4>
-                                <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
-                                <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
-                                  <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10 font-medium">{book.country}</span>
-                                  <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10 font-medium">{book.timePeriod}</span>
+                                <h4 className="font-serif text-lg text-[#1A110E] font-medium leading-snug">{book.title}</h4>
+                                <p className="text-sm text-[#3E332E]/80 mt-0.5">by {book.author}</p>
+                                <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-[#3E332E]/60">
+                                  <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.country}</span>
+                                  <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.timePeriod}</span>
                                 </div>
                               </div>
 
