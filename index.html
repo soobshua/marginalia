@@ -65,7 +65,28 @@
             fetch(SHEET_CSV_URL)
               .then(res => res.text())
               .then(csvText => {
-                const rows = csvText.split('\n').map(row => row.split(',').map(val => val.replace(/^"|"$/g, '').trim()));
+                const lines = csvText.split('\n');
+                // Basic CSV line parser handling quoted commas if present
+                const parseCSVLine = (text) => {
+                  const result = [];
+                  let current = '';
+                  let inQuotes = false;
+                  for (let i = 0; i < text.length; i++) {
+                    const char = text[i];
+                    if (char === '"') {
+                      inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                      result.push(current.replace(/^"|"$/g, '').trim());
+                      current = '';
+                    } else {
+                      current += char;
+                    }
+                  }
+                  result.push(current.replace(/^"|"$/g, '').trim());
+                  return result;
+                };
+
+                const rows = lines.map(line => parseCSVLine(line));
                 const headers = rows[0].map(h => h.toLowerCase());
                 
                 const parsedBooks = rows.slice(1).filter(row => row.length >= headers.length && row[0]).map((row, idx) => {
@@ -73,21 +94,28 @@
                     const i = headers.indexOf(name);
                     return i !== -1 ? row[i] : '';
                   };
+                  
+                  const title = getCol('title') || 'Untitled Text';
+                  const author = getCol('author') || 'Unknown Author';
+                  const era = getCol('era') || '';
+                  const country = getCol('country') || '';
                   const yr = parseInt(getCol('year')) || 1900;
+                  const description = getCol('description') || 'Foundational text item.';
+                  
                   const decadeStr = `${Math.floor(yr / 10) * 10}s`;
 
                   return {
                     id: `sheet-${idx}`,
-                    title: getCol('title') || 'Untitled Text',
-                    author: getCol('author') || 'Unknown Author',
-                    era: getCol('era') || 'Foundational',
-                    country: getCol('country') || 'Global',
+                    title,
+                    author,
+                    era,
+                    country,
                     year: yr,
                     decade: decadeStr,
                     eloRank: null,
                     readCount: 0,
                     rereadDates: [],
-                    description: getCol('description') || 'Foundational text item.'
+                    description
                   };
                 });
 
@@ -191,7 +219,7 @@
             let content = `# Marginalia Sanctuary Journal\n\n`;
             content += `## Ranked Stack (${rankedBooks.length} Texts)\n`;
             rankedBooks.forEach((b, i) => {
-              content += `${i + 1}. **${b.title}** by ${b.author} (${b.decade}, ${b.country}) - Elo: ${b.eloRank}\n`;
+              content += `${i + 1}. **${b.title}** by ${b.author} (${b.era || b.decade}, ${b.country}) - Elo: ${b.eloRank}\n`;
             });
 
             const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
@@ -214,6 +242,7 @@
             const counts = {};
             rankedBooks.forEach(b => {
               let val = b[key];
+              if (key === 'era' && !val) val = b.decade;
               if (val) counts[val] = (counts[val] || 0) + 1;
             });
             let topVal = 'None';
@@ -229,7 +258,7 @@
 
           const favoriteCountry = getFavoriteMetric('country');
           const favoriteAuthor = getFavoriteMetric('author');
-          const favoriteDecade = getFavoriteMetric('decade');
+          const favoriteEra = getFavoriteMetric('era');
 
           if (isLoading) {
             return (
@@ -299,8 +328,8 @@
                                   <h4 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h4>
                                   <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
                                   <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
-                                    <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.decade}</span>
-                                    <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>
+                                    {book.era && <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.era}</span>}
+                                    {book.country && <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>}
                                     {book.readCount > 1 && (
                                       <span className="text-[#B89388] font-medium flex items-center gap-1">
                                         <Icon name="rotate-ccw" className="w-3 h-3" /> Reread {book.readCount - 1}x
@@ -342,8 +371,8 @@
                                 <h4 className="font-serif text-lg text-[#1A110E] font-medium">{book.title}</h4>
                                 <p className="text-sm text-[#3E332E]/80">by {book.author}</p>
                                 <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-[#3E332E]/60">
-                                  <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.decade}</span>
-                                  <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>
+                                  {book.era && <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.era}</span>}
+                                  {book.country && <span className="bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#3E332E]/10">{book.country}</span>}
                                 </div>
                               </div>
 
@@ -411,7 +440,7 @@
                       </div>
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center">
                         <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Time Period</span>
-                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteDecade}</span>
+                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteEra}</span>
                       </div>
                     </div>
                   </div>
