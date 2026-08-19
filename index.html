@@ -48,7 +48,7 @@
           const [isLoading, setIsLoading] = useState(true);
 
           const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/10LcHUiSL2_GG_OyT18wyeFkJo3dzn0wU9o4QMq1Zdbw/export?format=csv";
-          const STORAGE_KEY = 'marginalia_corpus_state_v2';
+          const STORAGE_KEY = 'marginalia_corpus_state_v3';
 
           // Binary insertion duel state
           const [activeDuel, setActiveDuel] = useState(null);
@@ -75,7 +75,7 @@
             return () => document.removeEventListener('mousedown', handleClickOutside);
           }, []);
 
-          // Fetch and parse Google Sheet CSV safely with localStorage persistence synchronization
+          // Fetch and parse Google Sheet CSV safely — preserving all 501 items while filtering only literal header remnants
           useEffect(() => {
             fetch(SHEET_CSV_URL)
               .then(res => res.text())
@@ -108,11 +108,16 @@
 
                 const rawHeaders = rows[0].map(h => h.toLowerCase().trim());
 
-                const parsedBooks = rows.slice(1).filter(row => {
+                const parsedBooks = rows.slice(1).filter((row, idx) => {
                   if (row.length === 0 || !row.some(cell => cell !== '')) return false;
-                  // Filter out ghost rows like "Read 2021 by Unknown Author Global Global"
-                  const joined = row.join(' ').toLowerCase();
-                  if (joined.includes('read 2021') || joined.includes('unknown author')) return false;
+                  
+                  // Specifically target only the exact redundant header/metadata artifact row if present
+                  const titleCell = (row[0] || '').toLowerCase();
+                  const authorCell = (row[1] || '').toLowerCase();
+                  if (idx === 0 && titleCell.includes('read 2021') && authorCell.includes('unknown author')) {
+                    return false;
+                  }
+                  
                   return true;
                 }).map((row, idx) => {
                   const getColVal = (possibleNames) => {
@@ -366,9 +371,9 @@
             return `${readBooks[0].title} (${readBooks[0].readCount} reads)`;
           };
 
-          const favoriteCountry = getFavoriteMetric('country');
-          const favoriteTimePeriod = calculateWeightedFavoriteDecade();
-          const favoriteAuthor = getFavoriteMetric('author');
+          const favouriteCountry = getFavoriteMetric('country');
+          const favouriteTimePeriod = calculateWeightedFavoriteDecade();
+          const favouriteAuthor = getFavoriteMetric('author');
           const mostRereadBook = getMostRereadBook();
 
           const filteredDispatchBooks = books.filter(b => 
@@ -388,7 +393,7 @@
 
           return (
             <div className="min-h-screen bg-[#FDFBF7] text-[#3E332E] font-serif flex flex-col">
-              <header className="border-b border-[#3E332E]/15 bg-[#F5F2EB]/80 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+              <header className="border-b border-[#3E332E]/15 bg-[#F5F2EB]/85 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Icon name="feather" className="w-6 h-6 text-[#7A8D7B]" />
                   <h1 className="text-2xl font-semibold tracking-wide text-[#1A110E] font-serif">Marginalia</h1>
@@ -640,16 +645,16 @@
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Country</span>
-                        <span className="text-xl font-serif text-[#1A110E]">{favoriteCountry}</span>
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favourite Country</span>
+                        <span className="text-xl font-serif text-[#1A110E]">{favouriteCountry}</span>
                       </div>
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Time Period (Weighted Top 10%)</span>
-                        <span className="text-xl font-serif text-[#1A110E]">{favoriteTimePeriod}</span>
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favourite Time Period</span>
+                        <span className="text-xl font-serif text-[#1A110E]">{favouriteTimePeriod}</span>
                       </div>
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Author</span>
-                        <span className="text-xl font-serif text-[#1A110E]">{favoriteAuthor}</span>
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favourite Author</span>
+                        <span className="text-xl font-serif text-[#1A110E]">{favouriteAuthor}</span>
                       </div>
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
                         <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Most Reread Book</span>
@@ -721,7 +726,7 @@
                       </div>
 
                       <div>
-                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Personalized Message / Notes</label>
+                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Personalised Message / Notes</label>
                         <textarea
                           rows="4"
                           required
@@ -788,7 +793,7 @@
               </main>
 
               <footer className="border-t border-[#3E332E]/15 bg-[#F5F2EB]/50 py-6 text-center text-xs text-[#3E332E]/60 font-serif">
-                <p>Marginalia — Synchronized with your Google Sheets Corpus.</p>
+                <p>Marginalia — Synchronised with your Google Sheets Corpus.</p>
               </footer>
             </div>
           );
