@@ -48,7 +48,7 @@
           const [isLoading, setIsLoading] = useState(true);
 
           const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/10LcHUiSL2_GG_OyT18wyeFkJo3dzn0wU9o4QMq1Zdbw/export?format=csv";
-          const STORAGE_KEY = 'marginalia_corpus_state_v1';
+          const STORAGE_KEY = 'marginalia_corpus_state_v2';
 
           // Binary insertion duel state
           const [activeDuel, setActiveDuel] = useState(null);
@@ -57,9 +57,9 @@
           const [dispatchQuery, setDispatchQuery] = useState('');
           const [dispatchSelectedBook, setDispatchSelectedBook] = useState(null);
           const [showDropdown, setShowDropdown] = useState(false);
+          const dropdownRef = useRef(null);
           const [dispatchRecipient, setDispatchRecipient] = useState('');
           const [dispatchMessage, setDispatchMessage] = useState('');
-          const dropdownRef = useRef(null);
 
           useEffect(() => {
             if (window.lucide) window.lucide.createIcons();
@@ -140,6 +140,7 @@
                     eloRank: null,
                     readCount: 0,
                     rereadDates: [],
+                    isArchived: false,
                     description
                   };
                 });
@@ -191,15 +192,17 @@
                 booksMap[b.id] = {
                   eloRank: b.eloRank,
                   readCount: b.readCount,
-                  rereadDates: b.rereadDates
+                  rereadDates: b.rereadDates,
+                  isArchived: b.isArchived
                 };
               });
               localStorage.setItem(STORAGE_KEY, JSON.stringify(booksMap));
             }
           }, [books, isLoading]);
 
-          const rankedBooks = books.filter(b => b.eloRank !== null).sort((a, b) => b.eloRank - a.eloRank);
-          const unrankedBooks = books.filter(b => b.eloRank === null);
+          const rankedBooks = books.filter(b => b.eloRank !== null && !b.isArchived).sort((a, b) => b.eloRank - a.eloRank);
+          const unrankedBooks = books.filter(b => b.eloRank === null && !b.isArchived);
+          const archivedBooks = books.filter(b => b.isArchived);
 
           const startBinaryDuel = (targetBook, currentRanked) => {
             if (currentRanked.length === 0) {
@@ -219,7 +222,7 @@
             const target = books.find(b => b.id === id);
             if (!target) return;
 
-            const currentRanked = books.filter(b => b.eloRank !== null).sort((a, b) => b.eloRank - a.eloRank);
+            const currentRanked = books.filter(b => b.eloRank !== null && !b.isArchived).sort((a, b) => b.eloRank - a.eloRank);
             
             setBooks(prev => prev.map(b => b.id === id ? { ...b, readCount: 1 } : b));
 
@@ -242,10 +245,18 @@
               return b;
             }));
 
-            const currentRanked = books.filter(b => b.eloRank !== null && b.id !== id).sort((a, b) => b.eloRank - a.eloRank);
+            const currentRanked = books.filter(b => b.eloRank !== null && !b.isArchived && b.id !== id).sort((a, b) => b.eloRank - a.eloRank);
             if (currentRanked.length > 0) {
               startBinaryDuel(target, currentRanked);
             }
+          };
+
+          const handleArchive = (id) => {
+            setBooks(prev => prev.map(b => b.id === id ? { ...b, isArchived: true } : b));
+          };
+
+          const handleUnarchive = (id) => {
+            setBooks(prev => prev.map(b => b.id === id ? { ...b, isArchived: false } : b));
           };
 
           const handleDuelResponse = (preferTarget) => {
@@ -287,26 +298,11 @@
             }
           };
 
-          const exportJournal = () => {
-            let content = `# Marginalia Sanctuary Journal\n\n`;
-            content += `## Ranked Stack (${rankedBooks.length} Texts)\n`;
-            rankedBooks.forEach((b, i) => {
-              content += `${i + 1}. **${b.title}** by ${b.author} (${b.country} • ${b.timePeriod}) - Elo: ${b.eloRank}\n`;
-            });
-
-            const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'marginalia_sanctuary.md';
-            link.click();
-          };
-
           const handleDispatchMail = (e) => {
             e.preventDefault();
             const bookTitle = dispatchSelectedBook ? dispatchSelectedBook.title : dispatchQuery;
-            const subject = encodeURIComponent(`Book Rec: ${bookTitle}`);
-            const body = encodeURIComponent(`Hello,\n\nI just finished this book and wanted to share it with you:\n\nTitle: ${bookTitle}\n\nMessage:\n${dispatchMessage}\n\n— Sent via Marginalia`);
+            const subject = encodeURIComponent(`A Foundational Text Dispatch: ${bookTitle}`);
+            const body = encodeURIComponent(`Hello,\n\nI am sharing a foundational text with you from The 500 corpus:\n\nTitle: ${bookTitle}\n\nNote:\n${dispatchMessage}\n\n— Sent via Marginalia`);
             window.location.href = `mailto:${dispatchRecipient}?subject=${subject}&body=${body}`;
           };
 
@@ -328,19 +324,58 @@
             return topVal;
           };
 
+          const calculateWeightedFavoriteDecade = () => {
+            if (rankedBooks.length === 0) return 'None yet';
+            const topCount = Math.max(1, Math.ceil(rankedBooks.length * 0.10));
+            const topBooks = rankedBooks.slice(0, topCount);
+
+            let totalWeightedYear = 0;
+            let totalWeight = 0;
+
+            topBooks.forEach((b, index) => {
+              const weight = topCount - index;
+              const matches = b.timePeriod.match(/\b(1[0-9]{3}|20[0-9]{2}|[0-9]{3,4})\b/g);
+              if (matches && matches.length > 0) {
+                let year = parseInt(matches[0], 10);
+                if (b.timePeriod.toLowerCase().includes('bc') || b.timePeriod.toLowerCase().includes('bce')) {
+                  year = -year;
+                }
+                totalWeightedYear += year * weight;
+                totalWeight += weight;
+              }
+            });
+
+            if (totalWeight === 0) return 'None yet';
+
+            const averageYear = Math.round(totalWeightedYear / totalWeight);
+            const decadeBase = Math.floor(Math.abs(averageYear) / 10) * 10;
+            const suffix = averageYear < 0 ? 's BCE' : 's';
+            return `${decadeBase}${suffix}`;
+          };
+
+          const getMostRereadBook = () => {
+            const readBooks = books.filter(b => b.readCount > 1);
+            if (readBooks.length === 0) return 'None yet';
+            readBooks.sort((a, b) => b.readCount - a.readCount);
+            return `${readBooks[0].title} (${readBooks[0].readCount} reads)`;
+          };
+
           const favoriteCountry = getFavoriteMetric('country');
-          const favoriteTimePeriod = getFavoriteMetric('timePeriod');
+          const favoriteTimePeriod = calculateWeightedFavoriteDecade();
           const favoriteAuthor = getFavoriteMetric('author');
+          const mostRereadBook = getMostRereadBook();
 
           const filteredDispatchBooks = books.filter(b => 
-            b.title.toLowerCase().includes(dispatchQuery.toLowerCase()) || 
-            b.author.toLowerCase().includes(dispatchQuery.toLowerCase())
+            !b.isArchived && (
+              b.title.toLowerCase().includes(dispatchQuery.toLowerCase()) || 
+              b.author.toLowerCase().includes(dispatchQuery.toLowerCase())
+            )
           );
 
           if (isLoading) {
             return (
               <div className="min-h-screen flex items-center justify-center bg-[#FDFBF7]">
-                <p className="font-serif italic text-lg text-[#3E332E]">Loading Book Repository...</p>
+                <p className="font-serif italic text-lg text-[#3E332E]">Loading Marginalia Corpus...</p>
               </div>
             );
           }
@@ -355,9 +390,11 @@
 
                 <nav className="hidden md:flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner">
                   {[
-                    { id: 'stack', label: 'Book Stack', icon: 'book-open' },
+                    { id: 'stack', label: 'Ranking Stack', icon: 'book-open' },
+                    { id: 'progress', label: 'Progress', icon: 'bar-chart-2' },
                     { id: 'profile', label: 'Reader Profile', icon: 'compass' },
                     { id: 'dispatch', label: 'Dispatch Letter', icon: 'send' },
+                    { id: 'archive', label: 'Archive', icon: 'archive' },
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -373,11 +410,11 @@
                 </nav>
 
                 <button
-                  onClick={exportJournal}
-                  className="text-xs border border-[#3E332E]/30 px-3 py-1.5 rounded hover:bg-[#3E332E] hover:text-[#FDFBF7] transition-all flex items-center gap-1.5 shadow-sm"
+                  onClick={() => setActiveTab('archive')}
+                  className="md:hidden text-xs border border-[#3E332E]/30 px-3 py-1.5 rounded hover:bg-[#3E332E] hover:text-[#FDFBF7] transition-all flex items-center gap-1.5 shadow-sm"
                 >
-                  <Icon name="file-text" className="w-3.5 h-3.5" />
-                  <span>Export Journal</span>
+                  <Icon name="archive" className="w-3.5 h-3.5" />
+                  <span>Archive</span>
                 </button>
               </header>
 
@@ -469,7 +506,7 @@
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
+                              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
                                 <div className="text-right">
                                   <span className="text-xs uppercase tracking-wider text-[#3E332E]/50 block">Elo Score</span>
                                   <span className="font-mono text-sm font-semibold text-[#1A110E]">{book.eloRank}</span>
@@ -481,6 +518,15 @@
                                 >
                                   <Icon name="rotate-ccw" className="w-3 h-3" />
                                   <span>Log Reread</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleArchive(book.id)}
+                                  className="border border-red-300/60 text-red-700/80 px-2.5 py-1.5 rounded text-xs hover:bg-red-50 transition-all flex items-center gap-1 cursor-pointer"
+                                  title="I don't want to read this"
+                                >
+                                  <Icon name="archive" className="w-3 h-3" />
+                                  <span>Archive</span>
                                 </button>
                               </div>
                             </div>
@@ -507,13 +553,24 @@
                                 </div>
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={() => handleFirstRead(book.id)}
-                                className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors cursor-pointer"
-                              >
-                                Log Read
-                              </button>
+                              <div className="flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
+                                <button
+                                  type="button"
+                                  onClick={() => handleFirstRead(book.id)}
+                                  className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors cursor-pointer"
+                                >
+                                  Log Read
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleArchive(book.id)}
+                                  className="border border-red-300/60 text-red-700/80 px-2.5 py-2 rounded text-xs hover:bg-red-50 transition-all flex items-center gap-1 cursor-pointer"
+                                  title="I don't want to read this"
+                                >
+                                  <Icon name="archive" className="w-3 h-3" />
+                                  <span>I don't want to read this</span>
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -522,6 +579,52 @@
                   </div>
                 )}
 
+                {activeTab === 'progress' && (() => {
+                  const availableBooksCount = books.filter(b => !b.isArchived).length;
+                  const totalReadCount = books.filter(b => b.readCount > 0 && !b.isArchived).length;
+                  const percent = availableBooksCount > 0 ? Math.round((totalReadCount / availableBooksCount) * 100) : 0;
+
+                  return (
+                    <div className="space-y-8 animate-fadeIn max-w-2xl mx-auto">
+                      <div className="border-b border-[#3E332E]/15 pb-4">
+                        <h2 className="text-3xl font-serif text-[#1A110E]">Corpus Progress</h2>
+                        <p className="text-sm text-[#3E332E]/70 italic">Tracking your journey through the active available library.</p>
+                      </div>
+
+                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-8 rounded-xl shadow-sm space-y-6">
+                        <div className="flex justify-between items-baseline">
+                          <div>
+                            <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Read / Available</span>
+                            <span className="text-3xl font-serif text-[#1A110E] font-medium">{totalReadCount} <span className="text-xl text-[#3E332E]/50">/ {availableBooksCount}</span></span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-3xl font-serif text-[#7A8D7B] font-semibold">{percent}%</span>
+                            <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Completion</span>
+                          </div>
+                        </div>
+
+                        <div className="w-full bg-[#3E332E]/10 h-3 rounded-full overflow-hidden">
+                          <div 
+                            className="bg-[#7A8D7B] h-full transition-all duration-500 rounded-full"
+                            style={{ width: `${percent}%` }}
+                          ></div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#3E332E]/10 text-center">
+                          <div>
+                            <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Archived Texts</span>
+                            <span className="text-xl font-serif text-[#3E332E]">{archivedBooks.length}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Total Corpus Size</span>
+                            <span className="text-xl font-serif text-[#3E332E]">{books.length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {activeTab === 'profile' && (
                   <div className="space-y-8 animate-fadeIn">
                     <div className="border-b border-[#3E332E]/15 pb-4">
@@ -529,18 +632,22 @@
                       <p className="text-sm text-[#3E332E]/70 italic">Insights derived exclusively from your ranked corpus.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
                         <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Country</span>
-                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteCountry}</span>
+                        <span className="text-xl font-serif text-[#1A110E]">{favoriteCountry}</span>
                       </div>
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Time Period</span>
-                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteTimePeriod}</span>
+                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Time Period (Weighted Top 10%)</span>
+                        <span className="text-xl font-serif text-[#1A110E]">{favoriteTimePeriod}</span>
                       </div>
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center">
+                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
                         <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favorite Author</span>
-                        <span className="text-2xl font-serif text-[#1A110E]">{favoriteAuthor}</span>
+                        <span className="text-xl font-serif text-[#1A110E]">{favoriteAuthor}</span>
+                      </div>
+                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Most Reread Book</span>
+                        <span className="text-xl font-serif text-[#1A110E]">{mostRereadBook}</span>
                       </div>
                     </div>
                   </div>
@@ -627,6 +734,49 @@
                         <span>Open Mail Client to Dispatch</span>
                       </button>
                     </form>
+                  </div>
+                )}
+
+                {activeTab === 'archive' && (
+                  <div className="space-y-8 animate-fadeIn">
+                    <div className="border-b border-[#3E332E]/15 pb-4">
+                      <h2 className="text-3xl font-serif text-[#1A110E]">Archived Corpus</h2>
+                      <p className="text-sm text-[#3E332E]/70 italic">Books you have chosen to set aside from your active reading stack.</p>
+                    </div>
+
+                    {archivedBooks.length === 0 ? (
+                      <div className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-12 text-center text-[#3E332E]/60">
+                        <Icon name="archive" className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p>No archived books at the moment.</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-4">
+                        {archivedBooks.map((book) => (
+                          <div
+                            key={book.id}
+                            className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
+                          >
+                            <div>
+                              <h4 className="font-serif text-lg text-[#1A110E] font-medium leading-snug">{book.title}</h4>
+                              <p className="text-sm text-[#3E332E]/80 mt-0.5">by {book.author}</p>
+                              <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-[#3E332E]/60">
+                                <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.country}</span>
+                                <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.timePeriod}</span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleUnarchive(book.id)}
+                              className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Icon name="rotate-ccw" className="w-3.5 h-3.5" />
+                              <span>I came to my sense and I want to read this</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </main>
