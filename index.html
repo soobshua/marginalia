@@ -305,8 +305,8 @@
           const handleDispatchMail = (e) => {
             e.preventDefault();
             const bookTitle = dispatchSelectedBook ? dispatchSelectedBook.title : dispatchQuery;
-            const subject = encodeURIComponent(`A Foundational Text Dispatch: ${bookTitle}`);
-            const body = encodeURIComponent(`Hello,\n\nI am sharing a foundational text with you from The 500 corpus:\n\nTitle: ${bookTitle}\n\nNote:\n${dispatchMessage}\n\n— Sent via Marginalia`);
+            const subject = encodeURIComponent(`Book Rec: ${bookTitle}`);
+            const body = encodeURIComponent(`Hello,\n\nI just finished this book and wanted to share it with you:\n\nTitle: ${bookTitle}\n\nMessage:\n${dispatchMessage}\n\n— Sent via Marginalia`);
             window.location.href = `mailto:${dispatchRecipient}?subject=${subject}&body=${body}`;
           };
 
@@ -340,7 +340,7 @@
           if (isLoading) {
             return (
               <div className="min-h-screen flex items-center justify-center bg-[#FDFBF7]">
-                <p className="font-serif italic text-lg text-[#3E332E]">Loading Marginalia Corpus...</p>
+                <p className="font-serif italic text-lg text-[#3E332E]">Loading Book Repository...</p>
               </div>
             );
           }
@@ -355,7 +355,7 @@
 
                 <nav className="hidden md:flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner">
                   {[
-                    { id: 'stack', label: 'Ranking Stack', icon: 'book-open' },
+                    { id: 'stack', label: 'Book Stack', icon: 'book-open' },
                     { id: 'profile', label: 'Reader Profile', icon: 'compass' },
                     { id: 'dispatch', label: 'Dispatch Letter', icon: 'send' },
                   ].map((tab) => (
