@@ -9,8 +9,6 @@
     <!-- React 18 UMD -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- Babel Standalone for JSX support -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Lucide Icons UMD -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -32,14 +30,15 @@
 <body class="bg-[#FDFBF7] text-[#3E332E] selection:bg-[#B89388]/30">
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script>
         const { useState, useEffect, useRef } = React;
-        
+        const e = React.createElement;
+
         function Icon({ name, className = "w-4 h-4", ...props }) {
           useEffect(() => {
             if (window.lucide) window.lucide.createIcons();
           }, [name]);
-          return <i data-lucide={name} className={className} {...props} />;
+          return e('i', { 'data-lucide': name, className, ...props });
         }
 
         function MarginaliaApp() {
@@ -61,8 +60,8 @@
           const [dispatchMessage, setDispatchMessage] = useState('');
 
           useEffect(() => {
-            const handleClickOutside = (e) => {
-              if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+            const handleClickOutside = (ev) => {
+              if (dropdownRef.current && !dropdownRef.current.contains(ev.target)) {
                 setShowDropdown(false);
               }
             };
@@ -96,13 +95,9 @@
                         currentRow.push(currentCell.trim());
                         currentCell = '';
                       } else if ((char === '\r' || char === '\n') && !inQuotes) {
-                        if (char === '\r' && nextChar === '\n') {
-                          i++;
-                        }
+                        if (char === '\r' && nextChar === '\n') i++;
                         currentRow.push(currentCell.trim());
-                        if (currentRow.some(cell => cell !== '')) {
-                          rows.push(currentRow);
-                        }
+                        if (currentRow.some(cell => cell !== '')) rows.push(currentRow);
                         currentRow = [];
                         currentCell = '';
                       } else {
@@ -110,9 +105,7 @@
                       }
                     }
                     currentRow.push(currentCell.trim());
-                    if (currentRow.some(cell => cell !== '')) {
-                      rows.push(currentRow);
-                    }
+                    if (currentRow.some(cell => cell !== '')) rows.push(currentRow);
                     return rows;
                   };
 
@@ -135,15 +128,11 @@
                     const getColVal = (possibleNames) => {
                       for (let name of possibleNames) {
                         const index = rawHeaders.indexOf(name);
-                        if (index !== -1 && row[index] !== undefined && row[index] !== '') {
-                          return row[index];
-                        }
+                        if (index !== -1 && row[index] !== undefined && row[index] !== '') return row[index];
                       }
                       for (let name of possibleNames) {
                         const index = rawHeaders.findIndex(h => h.includes(name));
-                        if (index !== -1 && row[index] !== undefined && row[index] !== '') {
-                          return row[index];
-                        }
+                        if (index !== -1 && row[index] !== undefined && row[index] !== '') return row[index];
                       }
                       return '';
                     };
@@ -175,27 +164,27 @@
                       const savedBooksMap = JSON.parse(savedState);
                       const mergedBooks = parsedBooks.map(book => {
                         if (savedBooksMap[book.id]) {
-                          return { ...book, ...savedBooksMap[book.id] };
+                          return Object.assign({}, book, savedBooksMap[book.id]);
                         }
                         return book;
                       });
                       setBooks(mergedBooks);
                       if (mergedBooks.length > 0) {
                         setDispatchSelectedBook(mergedBooks[0]);
-                        setDispatchQuery(`${mergedBooks[0].title} — ${mergedBooks[0].author}`);
+                        setDispatchQuery(mergedBooks[0].title + ' — ' + mergedBooks[0].author);
                       }
                     } catch (e) {
                       setBooks(parsedBooks);
                       if (parsedBooks.length > 0) {
                         setDispatchSelectedBook(parsedBooks[0]);
-                        setDispatchQuery(`${parsedBooks[0].title} — ${parsedBooks[0].author}`);
+                        setDispatchQuery(parsedBooks[0].title + ' — ' + parsedBooks[0].author);
                       }
                     }
                   } else {
                     setBooks(parsedBooks);
                     if (parsedBooks.length > 0) {
                       setDispatchSelectedBook(parsedBooks[0]);
-                      setDispatchQuery(`${parsedBooks[0].title} — ${parsedBooks[0].author}`);
+                      setDispatchQuery(parsedBooks[0].title + ' — ' + parsedBooks[0].author);
                     }
                   }
                   setIsLoading(false);
@@ -228,7 +217,7 @@
 
           const startBinaryDuel = (targetBook, currentRanked) => {
             if (currentRanked.length === 0) {
-              setBooks(prev => prev.map(b => b.id === targetBook.id ? { ...b, eloRank: 1500, readCount: b.readCount + 1 } : b));
+              setBooks(prev => prev.map(b => b.id === targetBook.id ? Object.assign({}, b, { eloRank: 1500, readCount: b.readCount + 1 }) : b));
               return;
             }
             setActiveDuel({
@@ -243,12 +232,11 @@
           const handleFirstRead = (id) => {
             const target = books.find(b => b.id === id);
             if (!target) return;
-
             const currentRanked = books.filter(b => b.eloRank !== null && !b.isArchived).sort((a, b) => b.eloRank - a.eloRank);
-            setBooks(prev => prev.map(b => b.id === id ? { ...b, readCount: 1 } : b));
+            setBooks(prev => prev.map(b => b.id === id ? Object.assign({}, b, { readCount: 1 }) : b));
 
             if (currentRanked.length === 0) {
-              setBooks(prev => prev.map(b => b.id === id ? { ...b, eloRank: 1500 } : b));
+              setBooks(prev => prev.map(b => b.id === id ? Object.assign({}, b, { eloRank: 1500 }) : b));
             } else {
               startBinaryDuel(target, currentRanked);
             }
@@ -261,7 +249,7 @@
 
             setBooks(prev => prev.map(b => {
               if (b.id === id) {
-                return { ...b, readCount: b.readCount + 1, rereadDates: [...b.rereadDates, today] };
+                return Object.assign({}, b, { readCount: b.readCount + 1, rereadDates: b.rereadDates.concat([today]) });
               }
               return b;
             }));
@@ -277,9 +265,9 @@
             setBooks(prev => prev.map(b => {
               if (b.id === archiveModalBookId) {
                 if (mode === 'clear') {
-                  return { ...b, isArchived: true, archiveMode: 'clear', eloRank: null, readCount: 0, rereadDates: [] };
+                  return Object.assign({}, b, { isArchived: true, archiveMode: 'clear', eloRank: null, readCount: 0, rereadDates: [] });
                 } else {
-                  return { ...b, isArchived: true, archiveMode: 'keep' };
+                  return Object.assign({}, b, { isArchived: true, archiveMode: 'keep' });
                 }
               }
               return b;
@@ -292,30 +280,26 @@
             if (!target) return;
 
             if (target.archiveMode === 'keep' && target.eloRank !== null) {
-              setBooks(prev => prev.map(b => b.id === id ? { ...b, isArchived: false, archiveMode: null, eloRank: null } : b));
+              setBooks(prev => prev.map(b => b.id === id ? Object.assign({}, b, { isArchived: false, archiveMode: null, eloRank: null }) : b));
               const currentRanked = books.filter(b => b.eloRank !== null && !b.isArchived && b.id !== id).sort((a, b) => b.eloRank - a.eloRank);
               startBinaryDuel(target, currentRanked);
             } else {
-              setBooks(prev => prev.map(b => b.id === id ? { ...b, isArchived: false, archiveMode: null } : b));
+              setBooks(prev => prev.map(b => b.id === id ? Object.assign({}, b, { isArchived: false, archiveMode: null }) : b));
             }
           };
 
           const handleDuelResponse = (preferTarget) => {
             if (!activeDuel) return;
             const { book, list, low, high, mid } = activeDuel;
-
             let newLow = low;
             let newHigh = high;
 
-            if (preferTarget) {
-              newHigh = mid - 1;
-            } else {
-              newLow = mid + 1;
-            }
+            if (preferTarget) newHigh = mid - 1;
+            else newLow = mid + 1;
 
             if (newLow <= newHigh) {
               const nextMid = Math.floor((newLow + newHigh) / 2);
-              setActiveDuel({ ...activeDuel, low: newLow, high: newHigh, mid: nextMid });
+              setActiveDuel(Object.assign({}, activeDuel, { low: newLow, high: newHigh, mid: nextMid }));
             } else {
               const insertIndex = preferTarget ? mid : mid + 1;
               setBooks(prev => prev.map(b => {
@@ -326,7 +310,7 @@
                   if (above && below) newElo = Math.round((above.eloRank + below.eloRank) / 2);
                   else if (above) newElo = above.eloRank - 20;
                   else if (below) newElo = below.eloRank + 20;
-                  return { ...b, eloRank: newElo };
+                  return Object.assign({}, b, { eloRank: newElo });
                 }
                 return b;
               }));
@@ -334,12 +318,12 @@
             }
           };
 
-          const handleDispatchMail = (e) => {
-            e.preventDefault();
+          const handleDispatchMail = (ev) => {
+            ev.preventDefault();
             const bookTitle = dispatchSelectedBook ? dispatchSelectedBook.title : dispatchQuery;
-            const subject = encodeURIComponent(`A Foundational Text Dispatch: ${bookTitle}`);
-            const body = encodeURIComponent(`Hello,\n\nI am sharing a foundational text with you from The 500 corpus:\n\nTitle: ${bookTitle}\n\nNote:\n${dispatchMessage}\n\n— Sent via Marginalia`);
-            window.location.href = `mailto:${dispatchRecipient}?subject=${subject}&body=${body}`;
+            const subject = encodeURIComponent('A Foundational Text Dispatch: ' + bookTitle);
+            const body = encodeURIComponent('Hello,\n\nI am sharing a foundational text with you from The 500 corpus:\n\nTitle: ' + bookTitle + '\n\nNote:\n' + dispatchMessage + '\n\n— Sent via Marginalia');
+            window.location.href = 'mailto:' + dispatchRecipient + '?subject=' + subject + '&body=' + body;
           };
 
           const getFavoriteMetric = (key) => {
@@ -381,14 +365,14 @@
             const averageYear = Math.round(totalWeightedYear / totalWeight);
             const decadeBase = Math.floor(Math.abs(averageYear) / 10) * 10;
             const suffix = averageYear < 0 ? 's BCE' : 's';
-            return `${decadeBase}${suffix}`;
+            return decadeBase + suffix;
           };
 
           const getMostRereadBook = () => {
             const readBooks = books.filter(b => b.readCount > 1);
             if (readBooks.length === 0) return 'None yet';
             readBooks.sort((a, b) => b.readCount - a.readCount);
-            return `${readBooks[0].title} (${readBooks[0].readCount} reads)`;
+            return readBooks[0].title + ' (' + readBooks[0].readCount + ' reads)';
           };
 
           const favouriteCountry = getFavoriteMetric('country');
@@ -404,428 +388,397 @@
           );
 
           if (isLoading) {
-            return (
-              <div className="min-h-screen flex items-center justify-center bg-[#FDFBF7]">
-                <p className="font-serif italic text-lg text-[#3E332E]">Loading Marginalia Corpus...</p>
-              </div>
+            return e('div', { className: "min-h-screen flex items-center justify-center bg-[#FDFBF7]" },
+              e('p', { className: "font-serif italic text-lg text-[#3E332E]" }, "Loading Marginalia Corpus...")
             );
           }
 
-          return (
-            <div className="min-h-screen bg-[#FDFBF7] text-[#3E332E] font-serif flex flex-col">
-              <header className="border-b border-[#3E332E]/15 bg-[#F5F2EB]/85 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Icon name="feather" className="w-6 h-6 text-[#7A8D7B]" />
-                  <h1 className="text-2xl font-semibold tracking-wide text-[#1A110E] font-serif">Marginalia</h1>
-                </div>
-                <nav className="hidden md:flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner">
-                  {[
-                    { id: 'stack', label: 'Ranking Stack', icon: 'book-open' },
-                    { id: 'progress', label: 'Progress', icon: 'bar-chart-2' },
-                    { id: 'profile', label: 'Reader Profile', icon: 'compass' },
-                    { id: 'dispatch', label: 'Dispatch Letter', icon: 'send' },
-                    { id: 'archive', label: 'Archive', icon: 'archive' },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-sm transition-all cursor-pointer ${
-                        activeTab === tab.id ? 'bg-[#1A110E] text-[#FDFBF7] shadow-sm' : 'text-[#3E332E]/75 hover:text-[#1A110E] hover:bg-[#F5F2EB]'
-                      }`}
-                    >
-                      <Icon name={tab.icon} />
-                      <span>{tab.label}</span>
-                    </button>
-                  ))}
-                </nav>
-                <button
-                  onClick={() => setActiveTab('archive')}
-                  className="md:hidden text-xs border border-[#3E332E]/30 px-3 py-1.5 rounded hover:bg-[#3E332E] hover:text-[#FDFBF7] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-                >
-                  <Icon name="archive" className="w-3.5 h-3.5" />
-                  <span>Archive</span>
-                </button>
-              </header>
+          return e('div', { className: "min-h-screen bg-[#FDFBF7] text-[#3E332E] font-serif flex flex-col" },
+            // Header
+            e('header', { className: "border-b border-[#3E332E]/15 bg-[#F5F2EB]/85 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between" },
+              e('div', { className: "flex items-center gap-3" },
+                e(Icon, { name: "feather", className: "w-6 h-6 text-[#7A8D7B]" }),
+                e('h1', { className: "text-2xl font-semibold tracking-wide text-[#1A110E] font-serif" }, "Marginalia")
+              ),
+              e('nav', { className: "hidden md:flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner" },
+                [
+                  { id: 'stack', label: 'Ranking Stack', icon: 'book-open' },
+                  { id: 'progress', label: 'Progress', icon: 'bar-chart-2' },
+                  { id: 'profile', label: 'Reader Profile', icon: 'compass' },
+                  { id: 'dispatch', label: 'Dispatch Letter', icon: 'send' },
+                  { id: 'archive', label: 'Archive', icon: 'archive' },
+                ].map(tab => 
+                  e('button', {
+                    key: tab.id,
+                    onClick: () => setActiveTab(tab.id),
+                    className: "flex items-center gap-2 px-3.5 py-1.5 rounded-md text-sm transition-all cursor-pointer " + (activeTab === tab.id ? 'bg-[#1A110E] text-[#FDFBF7] shadow-sm' : 'text-[#3E332E]/75 hover:text-[#1A110E] hover:bg-[#F5F2EB]')
+                  },
+                    e(Icon, { name: tab.icon }),
+                    e('span', null, tab.label)
+                  )
+                )
+              ),
+              e('button', {
+                onClick: () => setActiveTab('archive'),
+                className: "md:hidden text-xs border border-[#3E332E]/30 px-3 py-1.5 rounded hover:bg-[#3E332E] hover:text-[#FDFBF7] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+              },
+                e(Icon, { name: "archive", className: "w-3.5 h-3.5" }),
+                e('span', null, "Archive")
+              )
+            ),
 
-              <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
-                {archiveModalBookId && (
-                  <div className="fixed inset-0 bg-[#3E332E]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn">
-                    <div className="bg-[#FDFBF7] border border-[#3E332E]/20 rounded-xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-6 text-center">
-                      <div>
-                        <span className="text-xs uppercase tracking-wider text-[#7A8D7B] font-semibold">Archive Options</span>
-                        <h3 className="text-2xl font-serif text-[#1A110E] mt-1">Handling Statistics</h3>
-                        <p className="text-sm text-[#3E332E]/70 italic mt-1">How would you like to handle your reading stats for this text?</p>
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 pt-2">
-                        <button
-                          onClick={() => handleArchiveChoice('clear')}
-                          className="w-full bg-[#F5F2EB] border border-[#3E332E]/20 hover:border-[#3E332E] p-4 rounded-lg text-left transition-all cursor-pointer group"
-                        >
-                          <div className="font-serif font-medium text-[#1A110E] group-hover:text-[#7A8D7B]">Clear Stats</div>
-                          <div className="text-xs text-[#3E332E]/70 mt-0.5">Resets rank and read counts, sending it back to unread status.</div>
-                        </button>
-                        <button
-                          onClick={() => handleArchiveChoice('keep')}
-                          className="w-full bg-[#F5F2EB] border border-[#3E332E]/20 hover:border-[#3E332E] p-4 rounded-lg text-left transition-all cursor-pointer group"
-                        >
-                          <div className="font-serif font-medium text-[#1A110E] group-hover:text-[#7A8D7B]">Keep Stats</div>
-                          <div className="text-xs text-[#3E332E]/70 mt-0.5">Preserves your stats and triggers a reranking duel upon unarchiving.</div>
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => setArchiveModalBookId(null)}
-                        className="text-xs text-[#3E332E]/50 hover:text-[#3E332E] uppercase tracking-wider cursor-pointer pt-2"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
+            // Main Content Area
+            e('main', { className: "flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8" },
+              
+              // Archive Modal
+              archiveModalBookId && e('div', { className: "fixed inset-0 bg-[#3E332E]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn" },
+                e('div', { className: "bg-[#FDFBF7] border border-[#3E332E]/20 rounded-xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-6 text-center" },
+                  e('div', null,
+                    e('span', { className: "text-xs uppercase tracking-wider text-[#7A8D7B] font-semibold" }, "Archive Options"),
+                    e('h3', { className: "text-2xl font-serif text-[#1A110E] mt-1" }, "Handling Statistics"),
+                    e('p', { className: "text-sm text-[#3E332E]/70 italic mt-1" }, "How would you like to handle your reading stats for this text?")
+                  ),
+                  e('div', { className: "grid grid-cols-1 gap-3 pt-2" },
+                    e('button', {
+                      onClick: () => handleArchiveChoice('clear'),
+                      className: "w-full bg-[#F5F2EB] border border-[#3E332E]/20 hover:border-[#3E332E] p-4 rounded-lg text-left transition-all cursor-pointer group"
+                    },
+                      e('div', { className: "font-serif font-medium text-[#1A110E] group-hover:text-[#7A8D7B]" }, "Clear Stats"),
+                      e('div', { className: "text-xs text-[#3E332E]/70 mt-0.5" }, "Resets rank and read counts, sending it back to unread status.")
+                    ),
+                    e('button', {
+                      onClick: () => handleArchiveChoice('keep'),
+                      className: "w-full bg-[#F5F2EB] border border-[#3E332E]/20 hover:border-[#3E332E] p-4 rounded-lg text-left transition-all cursor-pointer group"
+                    },
+                      e('div', { className: "font-serif font-medium text-[#1A110E] group-hover:text-[#7A8D7B]" }, "Keep Stats"),
+                      e('div', { className: "text-xs text-[#3E332E]/70 mt-0.5" }, "Preserves your stats and triggers a reranking duel upon unarchiving.")
+                    )
+                  ),
+                  e('button', {
+                    onClick: () => setArchiveModalBookId(null),
+                    className: "text-xs text-[#3E332E]/50 hover:text-[#3E332E] uppercase tracking-wider cursor-pointer pt-2"
+                  }, "Cancel")
+                )
+              ),
 
-                {activeDuel && (
-                  <div className="fixed inset-0 bg-[#3E332E]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn">
-                    <div className="bg-[#FDFBF7] border border-[#3E332E]/20 rounded-xl max-w-xl w-full p-6 sm:p-8 shadow-2xl space-y-6 text-center">
-                      <div>
-                        <span className="text-xs uppercase tracking-wider text-[#7A8D7B] font-semibold">Corpus Calibration</span>
-                        <h3 className="text-2xl font-serif text-[#1A110E] mt-1">Comparing Texts</h3>
-                        <p className="text-sm text-[#3E332E]/70 italic mt-1">
-                          Where does <strong className="text-[#1A110E] font-medium">"{activeDuel.book.title}"</strong> stand relative to your stack?
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
-                        <div className="bg-[#F5F2EB] border-2 border-[#7A8D7B] rounded-lg p-5 flex flex-col justify-between">
-                          <div>
-                            <span className="text-[10px] uppercase tracking-wider text-[#7A8D7B] block mb-1">New Log / Reread</span>
-                            <h4 className="font-serif text-lg text-[#1A110E] font-medium">{activeDuel.book.title}</h4>
-                            <p className="text-xs text-[#3E332E]/70 mt-1">by {activeDuel.book.author}</p>
-                            <div className="flex items-center justify-center gap-2 mt-2 text-[11px] text-[#3E332E]/60">
-                              <span>{activeDuel.book.country}</span>
-                              <span>•</span>
-                              <span>{activeDuel.book.timePeriod}</span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleDuelResponse(true)}
-                            className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors cursor-pointer"
-                          >
-                            Prefer This
-                          </button>
-                        </div>
-                        <div className="bg-[#F5F2EB] border-2 border-[#3E332E]/20 rounded-lg p-5 flex flex-col justify-between">
-                          <div>
-                            <span className="text-[10px] uppercase tracking-wider text-[#3E332E]/50 block mb-1">Ranked Benchmark</span>
-                            <h4 className="font-serif text-lg text-[#1A110E] font-medium">{activeDuel.list[activeDuel.mid].title}</h4>
-                            <p className="text-xs text-[#3E332E]/70 mt-1">by {activeDuel.list[activeDuel.mid].author}</p>
-                            <div className="flex items-center justify-center gap-2 mt-2 text-[11px] text-[#3E332E]/60">
-                              <span>{activeDuel.list[activeDuel.mid].country}</span>
-                              <span>•</span>
-                              <span>{activeDuel.list[activeDuel.mid].timePeriod}</span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleDuelResponse(false)}
-                            className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors cursor-pointer"
-                          >
-                            Prefer This
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+              // Duel Modal
+              activeDuel && e('div', { className: "fixed inset-0 bg-[#3E332E]/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn" },
+                e('div', { className: "bg-[#FDFBF7] border border-[#3E332E]/20 rounded-xl max-w-xl w-full p-6 sm:p-8 shadow-2xl space-y-6 text-center" },
+                  e('div', null,
+                    e('span', { className: "text-xs uppercase tracking-wider text-[#7A8D7B] font-semibold" }, "Corpus Calibration"),
+                    e('h3', { className: "text-2xl font-serif text-[#1A110E] mt-1" }, "Comparing Texts"),
+                    e('p', { className: "text-sm text-[#3E332E]/70 italic mt-1" },
+                      "Where does ",
+                      e('strong', { className: "text-[#1A110E] font-medium" }, '"' + activeDuel.book.title + '"'),
+                      " stand relative to your stack?"
+                    )
+                  ),
+                  e('div', { className: "grid grid-cols-1 sm:grid-cols-2 gap-4 my-4" },
+                    e('div', { className: "bg-[#F5F2EB] border-2 border-[#7A8D7B] rounded-lg p-5 flex flex-col justify-between" },
+                      e('div', null,
+                        e('span', { className: "text-[10px] uppercase tracking-wider text-[#7A8D7B] block mb-1" }, "New Log / Reread"),
+                        e('h4', { className: "font-serif text-lg text-[#1A110E] font-medium" }, activeDuel.book.title),
+                        e('p', { className: "text-xs text-[#3E332E]/70 mt-1" }, "by " + activeDuel.book.author),
+                        e('div', { className: "flex items-center justify-center gap-2 mt-2 text-[11px] text-[#3E332E]/60" },
+                          e('span', null, activeDuel.book.country),
+                          e('span', null, "•"),
+                          e('span', null, activeDuel.book.timePeriod)
+                        )
+                      ),
+                      e('button', {
+                        onClick: () => handleDuelResponse(true),
+                        className: "mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                      }, "Prefer This")
+                    ),
+                    e('div', { className: "bg-[#F5F2EB] border-2 border-[#3E332E]/20 rounded-lg p-5 flex flex-col justify-between" },
+                      e('div', null,
+                        e('span', { className: "text-[10px] uppercase tracking-wider text-[#3E332E]/50 block mb-1" }, "Ranked Benchmark"),
+                        e('h4', { className: "font-serif text-lg text-[#1A110E] font-medium" }, activeDuel.list[activeDuel.mid].title),
+                        e('p', { className: "text-xs text-[#3E332E]/70 mt-1" }, "by " + activeDuel.list[activeDuel.mid].author),
+                        e('div', { className: "flex items-center justify-center gap-2 mt-2 text-[11px] text-[#3E332E]/60" },
+                          e('span', null, activeDuel.list[activeDuel.mid].country),
+                          e('span', null, "•"),
+                          e('span', null, activeDuel.list[activeDuel.mid].timePeriod)
+                        )
+                      ),
+                      e('button', {
+                        onClick: () => handleDuelResponse(false),
+                        className: "mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                      }, "Prefer This")
+                    )
+                  )
+                )
+              ),
 
-                {activeTab === 'stack' && (
-                  <div className="space-y-8 animate-fadeIn">
-                    <h2 className="text-3xl font-serif text-[#1A110E]">The 500</h2>
+              // Tab 1: Stack
+              activeTab === 'stack' && e('div', { className: "space-y-8 animate-fadeIn" },
+                e('h2', { className: "text-3xl font-serif text-[#1A110E]" }, "The 500"),
+                rankedBooks.length > 0 && e('div', { className: "space-y-4" },
+                  e('h3', { className: "text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2" }, "Ranked Texts"),
+                  e('div', { className: "grid gap-4" },
+                    rankedBooks.map((book, index) => 
+                      e('div', {
+                        key: book.id,
+                        className: "bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
+                      },
+                        e('div', { className: "flex items-start gap-4" },
+                          e('span', { className: "font-serif text-lg text-[#3E332E]/40 w-6 text-right pt-0.5" }, "#" + (index + 1)),
+                          e('div', null,
+                            e('h4', { className: "font-serif text-lg text-[#1A110E] font-medium leading-snug" }, book.title),
+                            e('p', { className: "text-sm text-[#3E332E]/80 mt-0.5" }, "by " + book.author),
+                            e('div', { className: "flex flex-wrap items-center gap-2 mt-2 text-xs text-[#3E332E]/60" },
+                              e('span', { className: "bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium" }, book.country),
+                              e('span', { className: "bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium" }, book.timePeriod),
+                              book.readCount > 1 && e('span', { className: "text-[#B89388] font-medium flex items-center gap-1" },
+                                e(Icon, { name: "rotate-ccw", className: "w-3 h-3" }),
+                                " Reread " + (book.readCount - 1) + "x"
+                              )
+                            )
+                          )
+                        ),
+                        e('div', { className: "flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10" },
+                          e('div', { className: "text-right" },
+                            e('span', { className: "text-xs uppercase tracking-wider text-[#3E332E]/50 block" }, "Elo Score"),
+                            e('span', { className: "font-mono text-sm font-semibold text-[#1A110E]" }, book.eloRank)
+                          ),
+                          e('button', {
+                            onClick: () => handleReread(book.id),
+                            className: "border border-[#3E332E]/30 px-3 py-1.5 rounded text-xs hover:bg-[#7A8D7B] hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
+                          },
+                            e(Icon, { name: "rotate-ccw", className: "w-3 h-3" }),
+                            e('span', null, "Log Reread")
+                          ),
+                          e('button', {
+                            onClick: () => setArchiveModalBookId(book.id),
+                            className: "border border-red-300/60 text-red-700/80 px-2.5 py-1.5 rounded text-xs hover:bg-red-50 transition-all flex items-center gap-1 cursor-pointer"
+                          },
+                            e(Icon, { name: "archive", className: "w-3 h-3" }),
+                            e('span', null, "Archive")
+                          )
+                        )
+                      )
+                    )
+                  )
+                ),
+                unrankedBooks.length > 0 && e('div', { className: "space-y-4 pt-4" },
+                  e('h3', { className: "text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2" },
+                    "Unread / Unranked Corpus (" + unrankedBooks.length + ")"
+                  ),
+                  e('div', { className: "grid gap-4" },
+                    unrankedBooks.map((book) => 
+                      e('div', {
+                        key: book.id,
+                        className: "bg-[#F5F2EB]/30 border border-[#3E332E]/10 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                      },
+                        e('div', null,
+                          e('h4', { className: "font-serif text-lg text-[#1A110E] font-medium leading-snug" }, book.title),
+                          e('p', { className: "text-sm text-[#3E332E]/80 mt-0.5" }, "by " + book.author),
+                          e('div', { className: "flex flex-wrap items-center gap-2 mt-2 text-xs text-[#3E332E]/60" },
+                            e('span', { className: "bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium" }, book.country),
+                            e('span', { className: "bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium" }, book.timePeriod)
+                          )
+                        ),
+                        e('div', { className: "flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10" },
+                          e('button', {
+                            onClick: () => handleFirstRead(book.id),
+                            className: "bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors cursor-pointer"
+                          }, "Log Read"),
+                          e('button', {
+                            onClick: () => setArchiveModalBookId(book.id),
+                            className: "border border-red-300/60 text-red-700/80 px-2.5 py-2 rounded text-xs hover:bg-red-50 transition-all flex items-center gap-1 cursor-pointer"
+                          },
+                            e(Icon, { name: "archive", className: "w-3 h-3" }),
+                            e('span', null, "I don't want to read this")
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
 
-                    {rankedBooks.length > 0 && (
-                      <div className="space-y-4">
-                        <h3 className="text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2">Ranked Texts</h3>
-                        <div className="grid gap-4">
-                          {rankedBooks.map((book, index) => (
-                            <div
-                              key={book.id}
-                              className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
-                            >
-                              <div className="flex items-start gap-4">
-                                <span className="font-serif text-lg text-[#3E332E]/40 w-6 text-right pt-0.5">#{index + 1}</span>
-                                <div>
-                                  <h4 className="font-serif text-lg text-[#1A110E] font-medium leading-snug">{book.title}</h4>
-                                  <p className="text-sm text-[#3E332E]/80 mt-0.5">by {book.author}</p>
-                                  <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-[#3E332E]/60">
-                                    <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.country}</span>
-                                    <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.timePeriod}</span>
-                                    {book.readCount > 1 && (
-                                      <span className="text-[#B89388] font-medium flex items-center gap-1">
-                                        <Icon name="rotate-ccw" className="w-3 h-3" />
-                                        {` Reread ${book.readCount - 1}x`}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
-                                <div className="text-right">
-                                  <span className="text-xs uppercase tracking-wider text-[#3E332E]/50 block">Elo Score</span>
-                                  <span className="font-mono text-sm font-semibold text-[#1A110E]">{book.eloRank}</span>
-                                </div>
-                                <button
-                                  onClick={() => handleReread(book.id)}
-                                  className="border border-[#3E332E]/30 px-3 py-1.5 rounded text-xs hover:bg-[#7A8D7B] hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
-                                >
-                                  <Icon name="rotate-ccw" className="w-3 h-3" />
-                                  <span>Log Reread</span>
-                                </button>
-                                <button
-                                  onClick={() => setArchiveModalBookId(book.id)}
-                                  className="border border-red-300/60 text-red-700/80 px-2.5 py-1.5 rounded text-xs hover:bg-red-50 transition-all flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Icon name="archive" className="w-3 h-3" />
-                                  <span>Archive</span>
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+              // Tab 2: Progress
+              activeTab === 'progress' && (() => {
+                const availableBooksCount = books.filter(b => !b.isArchived).length;
+                const totalReadCount = books.filter(b => b.readCount > 0 && !b.isArchived).length;
+                const percent = availableBooksCount > 0 ? Math.round((totalReadCount / availableBooksCount) * 100) : 0;
 
-                    {unrankedBooks.length > 0 && (
-                      <div className="space-y-4 pt-4">
-                        <h3 className="text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2">
-                          {`Unread / Unranked Corpus (${unrankedBooks.length})`}
-                        </h3>
-                        <div className="grid gap-4">
-                          {unrankedBooks.map((book) => (
-                            <div
-                              key={book.id}
-                              className="bg-[#F5F2EB]/30 border border-[#3E332E]/10 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-                            >
-                              <div>
-                                <h4 className="font-serif text-lg text-[#1A110E] font-medium leading-snug">{book.title}</h4>
-                                <p className="text-sm text-[#3E332E]/80 mt-0.5">by {book.author}</p>
-                                <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-[#3E332E]/60">
-                                  <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.country}</span>
-                                  <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.timePeriod}</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
-                                <button
-                                  onClick={() => handleFirstRead(book.id)}
-                                  className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors cursor-pointer"
-                                >
-                                  Log Read
-                                </button>
-                                <button
-                                  onClick={() => setArchiveModalBookId(book.id)}
-                                  className="border border-red-300/60 text-red-700/80 px-2.5 py-2 rounded text-xs hover:bg-red-50 transition-all flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Icon name="archive" className="w-3 h-3" />
-                                  <span>I don't want to read this</span>
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                return e('div', { className: "space-y-8 animate-fadeIn max-w-2xl mx-auto" },
+                  e('div', { className: "border-b border-[#3E332E]/15 pb-4" },
+                    e('h2', { className: "text-3xl font-serif text-[#1A110E]" }, "Corpus Progress"),
+                    e('p', { className: "text-sm text-[#3E332E]/70 italic" }, "Tracking your journey through the active available library.")
+                  ),
+                  e('div', { className: "bg-[#F5F2EB] border border-[#3E332E]/15 p-8 rounded-xl shadow-sm space-y-6" },
+                    e('div', { className: "flex justify-between items-baseline" },
+                      e('div', null,
+                        e('span', { className: "text-xs uppercase tracking-wider text-[#3E332E]/60 block" }, "Read / Available"),
+                        e('span', { className: "text-3xl font-serif text-[#1A110E] font-medium" },
+                          totalReadCount,
+                          e('span', { className: "text-xl text-[#3E332E]/50" }, " / " + availableBooksCount)
+                        )
+                      ),
+                      e('div', { className: "text-right" },
+                        e('span', { className: "text-3xl font-serif text-[#7A8D7B] font-semibold" }, percent + "%"),
+                        e('span', { className: "text-xs uppercase tracking-wider text-[#3E332E]/60 block" }, "Completion")
+                      )
+                    ),
+                    e('div', { className: "w-full bg-[#3E332E]/10 h-3 rounded-full overflow-hidden" },
+                      e('div', { className: "bg-[#7A8D7B] h-full transition-all duration-500 rounded-full", style: { width: percent + '%' } })
+                    ),
+                    e('div', { className: "grid grid-cols-2 gap-4 pt-4 border-t border-[#3E332E]/10 text-center" },
+                      e('div', null,
+                        e('span', { className: "text-xs uppercase tracking-wider text-[#3E332E]/60 block" }, "Archived Texts"),
+                        e('span', { className: "text-xl font-serif text-[#3E332E]" }, archivedBooks.length)
+                      ),
+                      e('div', null,
+                        e('span', { className: "text-xs uppercase tracking-wider text-[#3E332E]/60 block" }, "Total Corpus Size"),
+                        e('span', { className: "text-xl font-serif text-[#3E332E]" }, books.length)
+                      )
+                    )
+                  )
+                );
+              })(),
 
-                {activeTab === 'progress' && (() => {
-                  const availableBooksCount = books.filter(b => !b.isArchived).length;
-                  const totalReadCount = books.filter(b => b.readCount > 0 && !b.isArchived).length;
-                  const percent = availableBooksCount > 0 ? Math.round((totalReadCount / availableBooksCount) * 100) : 0;
+              // Tab 3: Profile
+              activeTab === 'profile' && e('div', { className: "space-y-8 animate-fadeIn" },
+                e('div', { className: "border-b border-[#3E332E]/15 pb-4" },
+                  e('h2', { className: "text-3xl font-serif text-[#1A110E]" }, "Reader Profile"),
+                  e('p', { className: "text-sm text-[#3E332E]/70 italic" }, "Insights derived exclusively from your ranked corpus.")
+                ),
+                e('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" },
+                  e('div', { className: "bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between" },
+                    e('span', { className: "text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2" }, "Favourite Country"),
+                    e('span', { className: "text-xl font-serif text-[#1A110E]" }, favouriteCountry)
+                  ),
+                  e('div', { className: "bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between" },
+                    e('span', { className: "text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2" }, "Favourite Time Period (Weighted Top 10%)"),
+                    e('span', { className: "text-xl font-serif text-[#1A110E]" }, favouriteTimePeriod)
+                  ),
+                  e('div', { className: "bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between" },
+                    e('span', { className: "text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2" }, "Favourite Author"),
+                    e('span', { className: "text-xl font-serif text-[#1A110E]" }, favouriteAuthor)
+                  ),
+                  e('div', { className: "bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between" },
+                    e('span', { className: "text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2" }, "Most Reread Book"),
+                    e('span', { className: "text-xl font-serif text-[#1A110E]" }, mostRereadBook)
+                  )
+                )
+              ),
 
-                  return (
-                    <div className="space-y-8 animate-fadeIn max-w-2xl mx-auto">
-                      <div className="border-b border-[#3E332E]/15 pb-4">
-                        <h2 className="text-3xl font-serif text-[#1A110E]">Corpus Progress</h2>
-                        <p className="text-sm text-[#3E332E]/70 italic">Tracking your journey through the active available library.</p>
-                      </div>
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-8 rounded-xl shadow-sm space-y-6">
-                        <div className="flex justify-between items-baseline">
-                          <div>
-                            <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Read / Available</span>
-                            <span className="text-3xl font-serif text-[#1A110E] font-medium">
-                              {totalReadCount}
-                              <span className="text-xl text-[#3E332E]/50">{` / ${availableBooksCount}`}</span>
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-3xl font-serif text-[#7A8D7B] font-semibold">{percent}%</span>
-                            <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Completion</span>
-                          </div>
-                        </div>
-                        <div className="w-full bg-[#3E332E]/10 h-3 rounded-full overflow-hidden">
-                          <div className="bg-[#7A8D7B] h-full transition-all duration-500 rounded-full" style={{ width: `${percent}%` }}></div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#3E332E]/10 text-center">
-                          <div>
-                            <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Archived Texts</span>
-                            <span className="text-xl font-serif text-[#3E332E]">{archivedBooks.length}</span>
-                          </div>
-                          <div>
-                            <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Total Corpus Size</span>
-                            <span className="text-xl font-serif text-[#3E332E]">{books.length}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
+              // Tab 4: Dispatch
+              activeTab === 'dispatch' && e('div', { className: "max-w-xl mx-auto space-y-8 animate-fadeIn" },
+                e('div', { className: "border-b border-[#3E332E]/15 pb-4" },
+                  e('h2', { className: "text-3xl font-serif text-[#1A110E]" }, "Dispatch a Letter"),
+                  e('p', { className: "text-sm text-[#3E332E]/70 italic" }, "Send a book and custom note directly via your email client.")
+                ),
+                e('form', { onSubmit: handleDispatchMail, className: "bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-4 shadow-sm" },
+                  e('div', { className: "relative", ref: dropdownRef },
+                    e('label', { className: "block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1" }, "Search & Select Book"),
+                    e('input', {
+                      type: "text",
+                      value: dispatchQuery,
+                      onChange: (ev) => { setDispatchQuery(ev.target.value); setShowDropdown(true); },
+                      onFocus: () => setShowDropdown(true),
+                      placeholder: "Type title or author...",
+                      className: "w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]",
+                      required: true
+                    }),
+                    showDropdown && filteredDispatchBooks.length > 0 && e('div', { className: "absolute z-20 left-0 right-0 mt-1 bg-[#FDFBF7] border border-[#3E332E]/20 rounded-lg shadow-lg max-h-60 overflow-y-auto" },
+                      filteredDispatchBooks.map(b => 
+                        e('div', {
+                          key: b.id,
+                          onClick: () => { setDispatchSelectedBook(b); setDispatchQuery(b.title + ' — ' + b.author); setShowDropdown(false); },
+                          className: "p-3 hover:bg-[#F5F2EB] cursor-pointer border-b border-[#3E332E]/5 last:border-b-0 text-left"
+                        },
+                          e('div', { className: "font-medium text-[#1A110E] text-sm" }, b.title),
+                          e('div', { className: "text-xs text-[#3E332E]/70 flex items-center gap-2 mt-0.5" },
+                            e('span', null, 'by ' + b.author),
+                            e('span', null, "•"),
+                            e('span', null, b.country),
+                            e('span', null, "•"),
+                            e('span', null, b.timePeriod)
+                          )
+                        )
+                      )
+                    )
+                  ),
+                  e('div', null,
+                    e('label', { className: "block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1" }, "Recipient Email Address"),
+                    e('input', {
+                      type: "email",
+                      required: true,
+                      placeholder: "colleague@example.com",
+                      value: dispatchRecipient,
+                      onChange: (ev) => setDispatchRecipient(ev.target.value),
+                      className: "w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
+                    })
+                  ),
+                  e('div', null,
+                    e('label', { className: "block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1" }, "Personalised Message / Notes"),
+                    e('textarea', {
+                      rows: "4",
+                      required: true,
+                      placeholder: "Write your reflections or thoughts on this text...",
+                      value: dispatchMessage,
+                      onChange: (ev) => setDispatchMessage(ev.target.value),
+                      className: "w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
+                    })
+                  ),
+                  e('button', {
+                    type: "submit",
+                    className: "w-full bg-[#1A110E] text-[#FDFBF7] py-2.5 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  },
+                    e(Icon, { name: "send", className: "w-4 h-4" }),
+                    e('span', null, "Open Mail Client to Dispatch")
+                  )
+                )
+              ),
 
-                {activeTab === 'profile' && (
-                  <div className="space-y-8 animate-fadeIn">
-                    <div className="border-b border-[#3E332E]/15 pb-4">
-                      <h2 className="text-3xl font-serif text-[#1A110E]">Reader Profile</h2>
-                      <p className="text-sm text-[#3E332E]/70 italic">Insights derived exclusively from your ranked corpus.</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favourite Country</span>
-                        <span className="text-xl font-serif text-[#1A110E]">{favouriteCountry}</span>
-                      </div>
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favourite Time Period (Weighted Top 10%)</span>
-                        <span className="text-xl font-serif text-[#1A110E]">{favouriteTimePeriod}</span>
-                      </div>
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favourite Author</span>
-                        <span className="text-xl font-serif text-[#1A110E]">{favouriteAuthor}</span>
-                      </div>
-                      <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Most Reread Book</span>
-                        <span className="text-xl font-serif text-[#1A110E]">{mostRereadBook}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+              // Tab 5: Archive
+              activeTab === 'archive' && e('div', { className: "space-y-8 animate-fadeIn" },
+                e('div', { className: "border-b border-[#3E332E]/15 pb-4" },
+                  e('h2', { className: "text-3xl font-serif text-[#1A110E]" }, "Archived Corpus"),
+                  e('p', { className: "text-sm text-[#3E332E]/70 italic" }, "Books you have chosen to set aside from your active reading stack.")
+                ),
+                archivedBooks.length === 0 ? e('div', { className: "bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-12 text-center text-[#3E332E]/60" },
+                  e(Icon, { name: "archive", className: "w-8 h-8 mx-auto mb-2 opacity-50" }),
+                  e('p', null, "No archived books at the moment.")
+                ) : e('div', { className: "grid gap-4" },
+                  archivedBooks.map(book => 
+                    e('div', {
+                      key: book.id,
+                      className: "bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
+                    },
+                      e('div', null,
+                        e('h4', { className: "font-serif text-lg text-[#1A110E] font-medium leading-snug" }, book.title),
+                        e('p', { className: "text-sm text-[#3E332E]/80 mt-0.5" }, "by " + book.author),
+                        e('div', { className: "flex flex-wrap items-center gap-2 mt-2 text-xs text-[#3E332E]/60" },
+                          e('span', { className: "bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium" }, book.country),
+                          e('span', { className: "bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium" }, book.timePeriod),
+                          book.archiveMode === 'keep' && book.eloRank !== null && e('span', { className: "text-[#7A8D7B] font-medium" }, "Stats Kept (Elo: " + book.eloRank + ")")
+                        )
+                      ),
+                      e('button', {
+                        onClick: () => handleUnarchive(book.id),
+                        className: "bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center gap-1.5 cursor-pointer"
+                      },
+                        e(Icon, { name: "rotate-ccw", className: "w-3.5 h-3.5" }),
+                        e('span', null, book.archiveMode === 'keep' && book.eloRank !== null ? 'Unarchive & Rerank' : 'Unarchive')
+                      )
+                    )
+                  )
+                )
+              )
+            ),
 
-                {activeTab === 'dispatch' && (
-                  <div className="max-w-xl mx-auto space-y-8 animate-fadeIn">
-                    <div className="border-b border-[#3E332E]/15 pb-4">
-                      <h2 className="text-3xl font-serif text-[#1A110E]">Dispatch a Letter</h2>
-                      <p className="text-sm text-[#3E332E]/70 italic">Send a book and custom note directly via your email client.</p>
-                    </div>
-                    <form onSubmit={handleDispatchMail} className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-4 shadow-sm">
-                      <div className="relative" ref={dropdownRef}>
-                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Search & Select Book</label>
-                        <input
-                          type="text"
-                          value={dispatchQuery}
-                          onChange={(e) => { setDispatchQuery(e.target.value); setShowDropdown(true); }}
-                          onFocus={() => setShowDropdown(true)}
-                          placeholder="Type title or author..."
-                          className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
-                          required
-                        />
-                        {showDropdown && filteredDispatchBooks.length > 0 && (
-                          <div className="absolute z-20 left-0 right-0 mt-1 bg-[#FDFBF7] border border-[#3E332E]/20 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {filteredDispatchBooks.map(b => (
-                              <div
-                                key={b.id}
-                                onClick={() => { setDispatchSelectedBook(b); setDispatchQuery(`${b.title} — ${b.author}`); setShowDropdown(false); }}
-                                className="p-3 hover:bg-[#F5F2EB] cursor-pointer border-b border-[#3E332E]/5 last:border-b-0 text-left"
-                              >
-                                <div className="font-medium text-[#1A110E] text-sm">{b.title}</div>
-                                <div className="text-xs text-[#3E332E]/70 flex items-center gap-2 mt-0.5">
-                                  <span>{`by ${b.author}`}</span>
-                                  <span>•</span>
-                                  <span>{b.country}</span>
-                                  <span>•</span>
-                                  <span>{b.timePeriod}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Recipient Email Address</label>
-                        <input
-                          type="email"
-                          required
-                          placeholder="colleague@example.com"
-                          value={dispatchRecipient}
-                          onChange={(e) => setDispatchRecipient(e.target.value)}
-                          className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Personalised Message / Notes</label>
-                        <textarea
-                          rows="4"
-                          required
-                          placeholder="Write your reflections or thoughts on this text..."
-                          value={dispatchMessage}
-                          onChange={(e) => setDispatchMessage(e.target.value)}
-                          className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
-                        ></textarea>
-                      </div>
-                      <button
-                        type="submit"
-                        className="w-full bg-[#1A110E] text-[#FDFBF7] py-2.5 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <Icon name="send" className="w-4 h-4" />
-                        <span>Open Mail Client to Dispatch</span>
-                      </button>
-                    </form>
-                  </div>
-                )}
-
-                {activeTab === 'archive' && (
-                  <div className="space-y-8 animate-fadeIn">
-                    <div className="border-b border-[#3E332E]/15 pb-4">
-                      <h2 className="text-3xl font-serif text-[#1A110E]">Archived Corpus</h2>
-                      <p className="text-sm text-[#3E332E]/70 italic">Books you have chosen to set aside from your active reading stack.</p>
-                    </div>
-                    {archivedBooks.length === 0 ? (
-                      <div className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-12 text-center text-[#3E332E]/60">
-                        <Icon name="archive" className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p>No archived books at the moment.</p>
-                      </div>
-                    ) : (
-                      <div className="grid gap-4">
-                        {archivedBooks.map(book => (
-                          <div
-                            key={book.id}
-                            className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
-                          >
-                            <div>
-                              <h4 className="font-serif text-lg text-[#1A110E] font-medium leading-snug">{book.title}</h4>
-                              <p className="text-sm text-[#3E332E]/80 mt-0.5">by {book.author}</p>
-                              <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-[#3E332E]/60">
-                                <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.country}</span>
-                                <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.timePeriod}</span>
-                                {book.archiveMode === 'keep' && book.eloRank !== null && (
-                                  <span className="text-[#7A8D7B] font-medium">{`Stats Kept (Elo: ${book.eloRank})`}</span>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleUnarchive(book.id)}
-                              className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center gap-1.5 cursor-pointer"
-                            >
-                              <Icon name="rotate-ccw" className="w-3.5 h-3.5" />
-                              <span>{book.archiveMode === 'keep' && book.eloRank !== null ? 'Unarchive & Rerank' : 'Unarchive'}</span>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </main>
-
-              <footer className="border-t border-[#3E332E]/15 bg-[#F5F2EB]/50 py-6 text-center text-xs text-[#3E332E]/60 font-serif">
-                <p>Marginalia — Synchronised with your Google Sheets Corpus.</p>
-              </footer>
-            </div>
+            // Footer
+            e('footer', { className: "border-t border-[#3E332E]/15 bg-[#F5F2EB]/50 py-6 text-center text-xs text-[#3E332E]/60 font-serif" },
+              e('p', null, "Marginalia — Synchronised with your Google Sheets Corpus.")
+            )
           );
         }
 
-        ReactDOM.createRoot(document.getElementById('root')).render(<MarginaliaApp />);
+        ReactDOM.createRoot(document.getElementById('root')).render(e(MarginaliaApp));
     </script>
 </body>
 </html>
