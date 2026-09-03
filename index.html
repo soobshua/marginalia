@@ -7,9 +7,9 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React 18 UMD -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <!-- Babel Standalone -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel Standalone for JSX support -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Lucide Icons UMD -->
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -35,12 +35,12 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
         
-        const Icon = ({ name, className = "w-4 h-4", ...props }) => {
+        function Icon({ name, className = "w-4 h-4", ...props }) {
           useEffect(() => {
             if (window.lucide) window.lucide.createIcons();
           }, [name]);
-          return <i data-lucide={name} className={className} {...props}></i>;
-        };
+          return <i data-lucide={name} className={className} {...props} />;
+        }
 
         function MarginaliaApp() {
           const [activeTab, setActiveTab] = useState('stack');
@@ -48,15 +48,11 @@
           const [isLoading, setIsLoading] = useState(true);
 
           const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/10LcHUiSL2_GG_OyT18wyeFkJo3dzn0wU9o4QMq1Zdbw/export?format=csv";
-          const STORAGE_KEY = 'marginalia_corpus_state_v6';
+          const STORAGE_KEY = 'marginalia_corpus_state_v7';
 
-          // Binary insertion duel state
           const [activeDuel, setActiveDuel] = useState(null);
-
-          // Archive modal state
           const [archiveModalBookId, setArchiveModalBookId] = useState(null);
           
-          // Dispatch state with autocomplete
           const [dispatchQuery, setDispatchQuery] = useState('');
           const [dispatchSelectedBook, setDispatchSelectedBook] = useState(null);
           const [showDropdown, setShowDropdown] = useState(false);
@@ -74,145 +70,142 @@
             return () => document.removeEventListener('mousedown', handleClickOutside);
           }, []);
 
-          // Fetch and parse Google Sheet CSV safely
           useEffect(() => {
             fetch(SHEET_CSV_URL)
               .then(res => res.text())
               .then(csvText => {
-                const parseCSV = (text) => {
-                  const rows = [];
-                  let currentRow = [];
-                  let currentCell = '';
-                  let inQuotes = false;
-                  
-                  for (let i = 0; i < text.length; i++) {
-                    const char = text[i];
-                    const nextChar = text[i + 1];
+                setTimeout(() => {
+                  const parseCSV = (text) => {
+                    const rows = [];
+                    let currentRow = [];
+                    let currentCell = '';
+                    let inQuotes = false;
                     
-                    if (char === '"') {
-                      if (inQuotes && nextChar === '"') {
-                        currentCell += '"';
-                        i++;
+                    for (let i = 0; i < text.length; i++) {
+                      const char = text[i];
+                      const nextChar = text[i + 1];
+                      
+                      if (char === '"') {
+                        if (inQuotes && nextChar === '"') {
+                          currentCell += '"';
+                          i++;
+                        } else {
+                          inQuotes = !inQuotes;
+                        }
+                      } else if (char === ',' && !inQuotes) {
+                        currentRow.push(currentCell.trim());
+                        currentCell = '';
+                      } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                        if (char === '\r' && nextChar === '\n') {
+                          i++;
+                        }
+                        currentRow.push(currentCell.trim());
+                        if (currentRow.some(cell => cell !== '')) {
+                          rows.push(currentRow);
+                        }
+                        currentRow = [];
+                        currentCell = '';
                       } else {
-                        inQuotes = !inQuotes;
-                      }
-                    } else if (char === ',' && !inQuotes) {
-                      currentRow.push(currentCell.trim());
-                      currentCell = '';
-                    } else if ((char === '\r' || char === '\n') && !inQuotes) {
-                      if (char === '\r' && nextChar === '\n') {
-                        i++;
-                      }
-                      currentRow.push(currentCell.trim());
-                      if (currentRow.some(cell => cell !== '')) {
-                        rows.push(currentRow);
-                      }
-                      currentRow = [];
-                      currentCell = '';
-                    } else {
-                      currentCell += char;
-                    }
-                  }
-                  currentRow.push(currentCell.trim());
-                  if (currentRow.some(cell => cell !== '')) {
-                    rows.push(currentRow);
-                  }
-                  return rows;
-                };
-
-                const rows = parseCSV(csvText);
-                if (rows.length === 0) {
-                  setIsLoading(false);
-                  return;
-                }
-
-                const rawHeaders = rows[0].map(h => h.toLowerCase().trim());
-
-                const parsedBooks = rows.slice(1).filter((row) => {
-                  if (row.length === 0 || !row.some(cell => cell !== '')) return false;
-                  const joined = row.join(' ').toLowerCase().trim();
-                  if (joined === 'read 2021' || (joined.includes('read 2021') && row.length <= 2 && row[0].toLowerCase().includes('read'))) {
-                    return false;
-                  }
-                  return true;
-                }).map((row, idx) => {
-                  const getColVal = (possibleNames) => {
-                    for (let name of possibleNames) {
-                      const index = rawHeaders.indexOf(name);
-                      if (index !== -1 && row[index] !== undefined && row[index] !== '') {
-                        return row[index];
+                        currentCell += char;
                       }
                     }
-                    for (let name of possibleNames) {
-                      const index = rawHeaders.findIndex(h => h.includes(name));
-                      if (index !== -1 && row[index] !== undefined && row[index] !== '') {
-                        return row[index];
-                      }
+                    currentRow.push(currentCell.trim());
+                    if (currentRow.some(cell => cell !== '')) {
+                      rows.push(currentRow);
                     }
-                    return '';
+                    return rows;
                   };
 
-                  const title = getColVal(['title', 'work', 'text', 'book']) || row[0] || 'Untitled Text';
-                  const author = getColVal(['author', 'writer', 'creator']) || row[1] || 'Unknown Author';
-                  const timePeriod = getColVal(['time period', 'time_period', 'era', 'period', 'century', 'date']) || row[2] || 'Global';
-                  const country = getColVal(['country', 'region', 'nation', 'origin']) || row[3] || 'Global';
-                  const description = getColVal(['description', 'summary', 'notes']) || row[4] || 'Foundational text item.';
+                  const rows = parseCSV(csvText);
+                  if (rows.length === 0) {
+                    setIsLoading(false);
+                    return;
+                  }
 
-                  return {
-                    id: `sheet-${idx}`,
-                    title,
-                    author,
-                    timePeriod,
-                    country,
-                    eloRank: null,
-                    readCount: 0,
-                    rereadDates: [],
-                    isArchived: false,
-                    archiveMode: null, // 'clear' or 'keep'
-                    description
-                  };
-                });
+                  const rawHeaders = rows[0].map(h => h.toLowerCase().trim());
 
-                // Merge with saved localStorage state if available
-                const savedState = localStorage.getItem(STORAGE_KEY);
-                if (savedState) {
-                  try {
-                    const savedBooksMap = JSON.parse(savedState);
-                    const mergedBooks = parsedBooks.map(book => {
-                      if (savedBooksMap[book.id]) {
-                        return { ...book, ...savedBooksMap[book.id] };
-                      }
-                      return book;
-                    });
-                    setBooks(mergedBooks);
-                    if (mergedBooks.length > 0) {
-                      setDispatchSelectedBook(mergedBooks[0]);
-                      setDispatchQuery(`${mergedBooks[0].title} — ${mergedBooks[0].author}`);
+                  const parsedBooks = rows.slice(1).filter((row) => {
+                    if (row.length === 0 || !row.some(cell => cell !== '')) return false;
+                    const joined = row.join(' ').toLowerCase().trim();
+                    if (joined === 'read 2021' || (joined.includes('read 2021') && row.length <= 2 && row[0].toLowerCase().includes('read'))) {
+                      return false;
                     }
-                  } catch (e) {
-                    console.error("Error parsing localStorage state:", e);
+                    return true;
+                  }).map((row, idx) => {
+                    const getColVal = (possibleNames) => {
+                      for (let name of possibleNames) {
+                        const index = rawHeaders.indexOf(name);
+                        if (index !== -1 && row[index] !== undefined && row[index] !== '') {
+                          return row[index];
+                        }
+                      }
+                      for (let name of possibleNames) {
+                        const index = rawHeaders.findIndex(h => h.includes(name));
+                        if (index !== -1 && row[index] !== undefined && row[index] !== '') {
+                          return row[index];
+                        }
+                      }
+                      return '';
+                    };
+
+                    const title = getColVal(['title', 'work', 'text', 'book']) || row[0] || 'Untitled Text';
+                    const author = getColVal(['author', 'writer', 'creator']) || row[1] || 'Unknown Author';
+                    const timePeriod = getColVal(['time period', 'time_period', 'era', 'period', 'century', 'date']) || row[2] || 'Global';
+                    const country = getColVal(['country', 'region', 'nation', 'origin']) || row[3] || 'Global';
+                    const description = getColVal(['description', 'summary', 'notes']) || row[4] || 'Foundational text item.';
+
+                    return {
+                      id: `sheet-${idx}`,
+                      title,
+                      author,
+                      timePeriod,
+                      country,
+                      eloRank: null,
+                      readCount: 0,
+                      rereadDates: [],
+                      isArchived: false,
+                      archiveMode: null,
+                      description
+                    };
+                  });
+
+                  const savedState = localStorage.getItem(STORAGE_KEY);
+                  if (savedState) {
+                    try {
+                      const savedBooksMap = JSON.parse(savedState);
+                      const mergedBooks = parsedBooks.map(book => {
+                        if (savedBooksMap[book.id]) {
+                          return { ...book, ...savedBooksMap[book.id] };
+                        }
+                        return book;
+                      });
+                      setBooks(mergedBooks);
+                      if (mergedBooks.length > 0) {
+                        setDispatchSelectedBook(mergedBooks[0]);
+                        setDispatchQuery(`${mergedBooks[0].title} — ${mergedBooks[0].author}`);
+                      }
+                    } catch (e) {
+                      setBooks(parsedBooks);
+                      if (parsedBooks.length > 0) {
+                        setDispatchSelectedBook(parsedBooks[0]);
+                        setDispatchQuery(`${parsedBooks[0].title} — ${parsedBooks[0].author}`);
+                      }
+                    }
+                  } else {
                     setBooks(parsedBooks);
                     if (parsedBooks.length > 0) {
                       setDispatchSelectedBook(parsedBooks[0]);
                       setDispatchQuery(`${parsedBooks[0].title} — ${parsedBooks[0].author}`);
                     }
                   }
-                } else {
-                  setBooks(parsedBooks);
-                  if (parsedBooks.length > 0) {
-                    setDispatchSelectedBook(parsedBooks[0]);
-                    setDispatchQuery(`${parsedBooks[0].title} — ${parsedBooks[0].author}`);
-                  }
-                }
-                setIsLoading(false);
+                  setIsLoading(false);
+                }, 0);
               })
               .catch(err => {
-                console.error("Error loading sheet:", err);
                 setIsLoading(false);
               });
           }, []);
 
-          // Save state changes to localStorage whenever books state updates
           useEffect(() => {
             if (books.length > 0 && !isLoading) {
               const booksMap = {};
@@ -252,7 +245,6 @@
             if (!target) return;
 
             const currentRanked = books.filter(b => b.eloRank !== null && !b.isArchived).sort((a, b) => b.eloRank - a.eloRank);
-            
             setBooks(prev => prev.map(b => b.id === id ? { ...b, readCount: 1 } : b));
 
             if (currentRanked.length === 0) {
@@ -282,31 +274,16 @@
 
           const handleArchiveChoice = (mode) => {
             if (!archiveModalBookId) return;
-            const target = books.find(b => b.id === archiveModalBookId);
-            if (!target) return;
-
             setBooks(prev => prev.map(b => {
               if (b.id === archiveModalBookId) {
                 if (mode === 'clear') {
-                  return {
-                    ...b,
-                    isArchived: true,
-                    archiveMode: 'clear',
-                    eloRank: null,
-                    readCount: 0,
-                    rereadDates: []
-                  };
+                  return { ...b, isArchived: true, archiveMode: 'clear', eloRank: null, readCount: 0, rereadDates: [] };
                 } else {
-                  return {
-                    ...b,
-                    isArchived: true,
-                    archiveMode: 'keep'
-                  };
+                  return { ...b, isArchived: true, archiveMode: 'keep' };
                 }
               }
               return b;
             }));
-
             setArchiveModalBookId(null);
           };
 
@@ -315,12 +292,10 @@
             if (!target) return;
 
             if (target.archiveMode === 'keep' && target.eloRank !== null) {
-              // Unarchive and trigger rerank duel
               setBooks(prev => prev.map(b => b.id === id ? { ...b, isArchived: false, archiveMode: null, eloRank: null } : b));
               const currentRanked = books.filter(b => b.eloRank !== null && !b.isArchived && b.id !== id).sort((a, b) => b.eloRank - a.eloRank);
               startBinaryDuel(target, currentRanked);
             } else {
-              // Just unarchive back to unread/unranked status
               setBooks(prev => prev.map(b => b.id === id ? { ...b, isArchived: false, archiveMode: null } : b));
             }
           };
@@ -343,23 +318,18 @@
               setActiveDuel({ ...activeDuel, low: newLow, high: newHigh, mid: nextMid });
             } else {
               const insertIndex = preferTarget ? mid : mid + 1;
-              
-              setBooks(prev => {
-                const updated = prev.map(b => {
-                  if (b.id === book.id) {
-                    const above = list[insertIndex - 1];
-                    const below = list[insertIndex];
-                    let newElo = 1500;
-                    if (above && below) newElo = Math.round((above.eloRank + below.eloRank) / 2);
-                    else if (above) newElo = above.eloRank - 20;
-                    else if (below) newElo = below.eloRank + 20;
-                    return { ...b, eloRank: newElo };
-                  }
-                  return b;
-                });
-                return updated;
-              });
-
+              setBooks(prev => prev.map(b => {
+                if (b.id === book.id) {
+                  const above = list[insertIndex - 1];
+                  const below = list[insertIndex];
+                  let newElo = 1500;
+                  if (above && below) newElo = Math.round((above.eloRank + below.eloRank) / 2);
+                  else if (above) newElo = above.eloRank - 20;
+                  else if (below) newElo = below.eloRank + 20;
+                  return { ...b, eloRank: newElo };
+                }
+                return b;
+              }));
               setActiveDuel(null);
             }
           };
@@ -367,8 +337,8 @@
           const handleDispatchMail = (e) => {
             e.preventDefault();
             const bookTitle = dispatchSelectedBook ? dispatchSelectedBook.title : dispatchQuery;
-            const subject = encodeURIComponent(`Book Rec: ${bookTitle}`);
-            const body = encodeURIComponent(`Hello,\n\nWanted to share this book with you:\n\nTitle: ${bookTitle}\n\nNote:\n${dispatchMessage}\n\n— Sent via Marginalia`);
+            const subject = encodeURIComponent(`A Foundational Text Dispatch: ${bookTitle}`);
+            const body = encodeURIComponent(`Hello,\n\nI am sharing a foundational text with you from The 500 corpus:\n\nTitle: ${bookTitle}\n\nNote:\n${dispatchMessage}\n\n— Sent via Marginalia`);
             window.location.href = `mailto:${dispatchRecipient}?subject=${subject}&body=${body}`;
           };
 
@@ -382,10 +352,7 @@
             let topVal = 'None';
             let maxCount = 0;
             for (const [k, v] of Object.entries(counts)) {
-              if (v > maxCount) {
-                maxCount = v;
-                topVal = k;
-              }
+              if (v > maxCount) { maxCount = v; topVal = k; }
             }
             return topVal;
           };
@@ -394,7 +361,6 @@
             if (rankedBooks.length === 0) return 'None yet';
             const topCount = Math.max(1, Math.ceil(rankedBooks.length * 0.10));
             const topBooks = rankedBooks.slice(0, topCount);
-
             let totalWeightedYear = 0;
             let totalWeight = 0;
 
@@ -412,7 +378,6 @@
             });
 
             if (totalWeight === 0) return 'None yet';
-
             const averageYear = Math.round(totalWeightedYear / totalWeight);
             const decadeBase = Math.floor(Math.abs(averageYear) / 10) * 10;
             const suffix = averageYear < 0 ? 's BCE' : 's';
@@ -453,31 +418,29 @@
                   <Icon name="feather" className="w-6 h-6 text-[#7A8D7B]" />
                   <h1 className="text-2xl font-semibold tracking-wide text-[#1A110E] font-serif">Marginalia</h1>
                 </div>
-
                 <nav className="hidden md:flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner">
                   {[
-                    { id: 'stack', label: 'List', icon: 'book-open' },
+                    { id: 'stack', label: 'Ranking Stack', icon: 'book-open' },
                     { id: 'progress', label: 'Progress', icon: 'bar-chart-2' },
                     { id: 'profile', label: 'Reader Profile', icon: 'compass' },
-                    { id: 'dispatch', label: 'Send Book', icon: 'send' },
+                    { id: 'dispatch', label: 'Dispatch Letter', icon: 'send' },
                     { id: 'archive', label: 'Archive', icon: 'archive' },
-                  ].map((tab) => (
+                  ].map(tab => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-sm transition-all ${
-                        activeTab === tab.id ? 'bg-[#1A110E] text-[#FDFBF7] shadow-sm' : 'text-[#3E332E]/70 hover:text-[#1A110E] hover:bg-[#F5F2EB]'
+                      className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-sm transition-all cursor-pointer ${
+                        activeTab === tab.id ? 'bg-[#1A110E] text-[#FDFBF7] shadow-sm' : 'text-[#3E332E]/75 hover:text-[#1A110E] hover:bg-[#F5F2EB]'
                       }`}
                     >
-                      <Icon name={tab.icon} className="w-4 h-4" />
+                      <Icon name={tab.icon} />
                       <span>{tab.label}</span>
                     </button>
                   ))}
                 </nav>
-
                 <button
                   onClick={() => setActiveTab('archive')}
-                  className="md:hidden text-xs border border-[#3E332E]/30 px-3 py-1.5 rounded hover:bg-[#3E332E] hover:text-[#FDFBF7] transition-all flex items-center gap-1.5 shadow-sm"
+                  className="md:hidden text-xs border border-[#3E332E]/30 px-3 py-1.5 rounded hover:bg-[#3E332E] hover:text-[#FDFBF7] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   <Icon name="archive" className="w-3.5 h-3.5" />
                   <span>Archive</span>
@@ -493,19 +456,15 @@
                         <h3 className="text-2xl font-serif text-[#1A110E] mt-1">Handling Statistics</h3>
                         <p className="text-sm text-[#3E332E]/70 italic mt-1">How would you like to handle your reading stats for this text?</p>
                       </div>
-
                       <div className="grid grid-cols-1 gap-3 pt-2">
                         <button
-                          type="button"
                           onClick={() => handleArchiveChoice('clear')}
                           className="w-full bg-[#F5F2EB] border border-[#3E332E]/20 hover:border-[#3E332E] p-4 rounded-lg text-left transition-all cursor-pointer group"
                         >
                           <div className="font-serif font-medium text-[#1A110E] group-hover:text-[#7A8D7B]">Clear Stats</div>
                           <div className="text-xs text-[#3E332E]/70 mt-0.5">Resets rank and read counts, sending it back to unread status.</div>
                         </button>
-
                         <button
-                          type="button"
                           onClick={() => handleArchiveChoice('keep')}
                           className="w-full bg-[#F5F2EB] border border-[#3E332E]/20 hover:border-[#3E332E] p-4 rounded-lg text-left transition-all cursor-pointer group"
                         >
@@ -513,9 +472,7 @@
                           <div className="text-xs text-[#3E332E]/70 mt-0.5">Preserves your stats and triggers a reranking duel upon unarchiving.</div>
                         </button>
                       </div>
-
                       <button
-                        type="button"
                         onClick={() => setArchiveModalBookId(null)}
                         className="text-xs text-[#3E332E]/50 hover:text-[#3E332E] uppercase tracking-wider cursor-pointer pt-2"
                       >
@@ -531,9 +488,10 @@
                       <div>
                         <span className="text-xs uppercase tracking-wider text-[#7A8D7B] font-semibold">Corpus Calibration</span>
                         <h3 className="text-2xl font-serif text-[#1A110E] mt-1">Comparing Texts</h3>
-                        <p className="text-sm text-[#3E332E]/70 italic mt-1">Where does <strong className="text-[#1A110E] font-medium">"{activeDuel.book.title}"</strong> stand relative to your stack?</p>
+                        <p className="text-sm text-[#3E332E]/70 italic mt-1">
+                          Where does <strong className="text-[#1A110E] font-medium">"{activeDuel.book.title}"</strong> stand relative to your stack?
+                        </p>
                       </div>
-
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
                         <div className="bg-[#F5F2EB] border-2 border-[#7A8D7B] rounded-lg p-5 flex flex-col justify-between">
                           <div>
@@ -547,14 +505,12 @@
                             </div>
                           </div>
                           <button
-                            type="button"
                             onClick={() => handleDuelResponse(true)}
                             className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors cursor-pointer"
                           >
                             Prefer This
                           </button>
                         </div>
-
                         <div className="bg-[#F5F2EB] border-2 border-[#3E332E]/20 rounded-lg p-5 flex flex-col justify-between">
                           <div>
                             <span className="text-[10px] uppercase tracking-wider text-[#3E332E]/50 block mb-1">Ranked Benchmark</span>
@@ -567,7 +523,6 @@
                             </div>
                           </div>
                           <button
-                            type="button"
                             onClick={() => handleDuelResponse(false)}
                             className="mt-4 bg-[#1A110E] text-[#FDFBF7] hover:bg-[#7A8D7B] py-2 rounded text-xs uppercase tracking-wider transition-colors cursor-pointer"
                           >
@@ -581,9 +536,7 @@
 
                 {activeTab === 'stack' && (
                   <div className="space-y-8 animate-fadeIn">
-                    <div>
-                      <h2 className="text-3xl font-serif text-[#1A110E]">The 500</h2>
-                    </div>
+                    <h2 className="text-3xl font-serif text-[#1A110E]">The 500</h2>
 
                     {rankedBooks.length > 0 && (
                       <div className="space-y-4">
@@ -604,20 +557,19 @@
                                     <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.timePeriod}</span>
                                     {book.readCount > 1 && (
                                       <span className="text-[#B89388] font-medium flex items-center gap-1">
-                                        <Icon name="rotate-ccw" className="w-3 h-3" /> Reread {book.readCount - 1}x
+                                        <Icon name="rotate-ccw" className="w-3 h-3" />
+                                        {` Reread ${book.readCount - 1}x`}
                                       </span>
                                     )}
                                   </div>
                                 </div>
                               </div>
-
                               <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
                                 <div className="text-right">
                                   <span className="text-xs uppercase tracking-wider text-[#3E332E]/50 block">Elo Score</span>
                                   <span className="font-mono text-sm font-semibold text-[#1A110E]">{book.eloRank}</span>
                                 </div>
                                 <button
-                                  type="button"
                                   onClick={() => handleReread(book.id)}
                                   className="border border-[#3E332E]/30 px-3 py-1.5 rounded text-xs hover:bg-[#7A8D7B] hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
                                 >
@@ -625,10 +577,8 @@
                                   <span>Log Reread</span>
                                 </button>
                                 <button
-                                  type="button"
                                   onClick={() => setArchiveModalBookId(book.id)}
                                   className="border border-red-300/60 text-red-700/80 px-2.5 py-1.5 rounded text-xs hover:bg-red-50 transition-all flex items-center gap-1 cursor-pointer"
-                                  title="Archive"
                                 >
                                   <Icon name="archive" className="w-3 h-3" />
                                   <span>Archive</span>
@@ -642,7 +592,9 @@
 
                     {unrankedBooks.length > 0 && (
                       <div className="space-y-4 pt-4">
-                        <h3 className="text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2">Unread ({unrankedBooks.length})</h3>
+                        <h3 className="text-xl font-serif text-[#1A110E] border-b border-[#3E332E]/10 pb-2">
+                          {`Unread / Unranked Corpus (${unrankedBooks.length})`}
+                        </h3>
                         <div className="grid gap-4">
                           {unrankedBooks.map((book) => (
                             <div
@@ -657,20 +609,16 @@
                                   <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.timePeriod}</span>
                                 </div>
                               </div>
-
                               <div className="flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-[#3E332E]/10">
                                 <button
-                                  type="button"
                                   onClick={() => handleFirstRead(book.id)}
                                   className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors cursor-pointer"
                                 >
                                   Log Read
                                 </button>
                                 <button
-                                  type="button"
                                   onClick={() => setArchiveModalBookId(book.id)}
                                   className="border border-red-300/60 text-red-700/80 px-2.5 py-2 rounded text-xs hover:bg-red-50 transition-all flex items-center gap-1 cursor-pointer"
-                                  title="I don't want to read this"
                                 >
                                   <Icon name="archive" className="w-3 h-3" />
                                   <span>I don't want to read this</span>
@@ -695,26 +643,23 @@
                         <h2 className="text-3xl font-serif text-[#1A110E]">Corpus Progress</h2>
                         <p className="text-sm text-[#3E332E]/70 italic">Tracking your journey through the active available library.</p>
                       </div>
-
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-8 rounded-xl shadow-sm space-y-6">
                         <div className="flex justify-between items-baseline">
                           <div>
                             <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Read / Available</span>
-                            <span className="text-3xl font-serif text-[#1A110E] font-medium">{totalReadCount} <span className="text-xl text-[#3E332E]/50">/ {availableBooksCount}</span></span>
+                            <span className="text-3xl font-serif text-[#1A110E] font-medium">
+                              {totalReadCount}
+                              <span className="text-xl text-[#3E332E]/50">{` / ${availableBooksCount}`}</span>
+                            </span>
                           </div>
                           <div className="text-right">
                             <span className="text-3xl font-serif text-[#7A8D7B] font-semibold">{percent}%</span>
                             <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Completion</span>
                           </div>
                         </div>
-
                         <div className="w-full bg-[#3E332E]/10 h-3 rounded-full overflow-hidden">
-                          <div 
-                            className="bg-[#7A8D7B] h-full transition-all duration-500 rounded-full"
-                            style={{ width: `${percent}%` }}
-                          ></div>
+                          <div className="bg-[#7A8D7B] h-full transition-all duration-500 rounded-full" style={{ width: `${percent}%` }}></div>
                         </div>
-
                         <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#3E332E]/10 text-center">
                           <div>
                             <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block">Archived Texts</span>
@@ -736,14 +681,13 @@
                       <h2 className="text-3xl font-serif text-[#1A110E]">Reader Profile</h2>
                       <p className="text-sm text-[#3E332E]/70 italic">Insights derived exclusively from your ranked corpus.</p>
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
                         <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favourite Country</span>
                         <span className="text-xl font-serif text-[#1A110E]">{favouriteCountry}</span>
                       </div>
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
-                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favourite Time Period</span>
+                        <span className="text-xs uppercase tracking-wider text-[#3E332E]/60 block mb-2">Favourite Time Period (Weighted Top 10%)</span>
                         <span className="text-xl font-serif text-[#1A110E]">{favouriteTimePeriod}</span>
                       </div>
                       <div className="bg-[#F5F2EB] border border-[#3E332E]/15 p-6 rounded-lg text-center flex flex-col justify-between">
@@ -764,38 +708,29 @@
                       <h2 className="text-3xl font-serif text-[#1A110E]">Dispatch a Letter</h2>
                       <p className="text-sm text-[#3E332E]/70 italic">Send a book and custom note directly via your email client.</p>
                     </div>
-
                     <form onSubmit={handleDispatchMail} className="bg-[#F5F2EB] border border-[#3E332E]/15 rounded-lg p-6 space-y-4 shadow-sm">
                       <div className="relative" ref={dropdownRef}>
                         <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Search & Select Book</label>
                         <input
                           type="text"
                           value={dispatchQuery}
-                          onChange={(e) => {
-                            setDispatchQuery(e.target.value);
-                            setShowDropdown(true);
-                          }}
+                          onChange={(e) => { setDispatchQuery(e.target.value); setShowDropdown(true); }}
                           onFocus={() => setShowDropdown(true)}
                           placeholder="Type title or author..."
                           className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
                           required
                         />
-
                         {showDropdown && filteredDispatchBooks.length > 0 && (
                           <div className="absolute z-20 left-0 right-0 mt-1 bg-[#FDFBF7] border border-[#3E332E]/20 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {filteredDispatchBooks.link ? null : filteredDispatchBooks.map(b => (
+                            {filteredDispatchBooks.map(b => (
                               <div
                                 key={b.id}
-                                onClick={() => {
-                                  setDispatchSelectedBook(b);
-                                  setDispatchQuery(`${b.title} — ${b.author}`);
-                                  setShowDropdown(false);
-                                }}
+                                onClick={() => { setDispatchSelectedBook(b); setDispatchQuery(`${b.title} — ${b.author}`); setShowDropdown(false); }}
                                 className="p-3 hover:bg-[#F5F2EB] cursor-pointer border-b border-[#3E332E]/5 last:border-b-0 text-left"
                               >
                                 <div className="font-medium text-[#1A110E] text-sm">{b.title}</div>
                                 <div className="text-xs text-[#3E332E]/70 flex items-center gap-2 mt-0.5">
-                                  <span>by {b.author}</span>
+                                  <span>{`by ${b.author}`}</span>
                                   <span>•</span>
                                   <span>{b.country}</span>
                                   <span>•</span>
@@ -806,7 +741,6 @@
                           </div>
                         )}
                       </div>
-
                       <div>
                         <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Recipient Email Address</label>
                         <input
@@ -818,7 +752,6 @@
                           className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
                         />
                       </div>
-
                       <div>
                         <label className="block text-xs uppercase tracking-wider text-[#3E332E]/70 mb-1">Personalised Message / Notes</label>
                         <textarea
@@ -830,7 +763,6 @@
                           className="w-full bg-[#FDFBF7] border border-[#3E332E]/20 rounded p-2 text-sm text-[#1A110E]"
                         ></textarea>
                       </div>
-
                       <button
                         type="submit"
                         className="w-full bg-[#1A110E] text-[#FDFBF7] py-2.5 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center justify-center gap-2 cursor-pointer"
@@ -848,7 +780,6 @@
                       <h2 className="text-3xl font-serif text-[#1A110E]">Archived Corpus</h2>
                       <p className="text-sm text-[#3E332E]/70 italic">Books you have chosen to set aside from your active reading stack.</p>
                     </div>
-
                     {archivedBooks.length === 0 ? (
                       <div className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-12 text-center text-[#3E332E]/60">
                         <Icon name="archive" className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -856,7 +787,7 @@
                       </div>
                     ) : (
                       <div className="grid gap-4">
-                        {archivedBooks.map((book) => (
+                        {archivedBooks.map(book => (
                           <div
                             key={book.id}
                             className="bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs"
@@ -868,18 +799,16 @@
                                 <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.country}</span>
                                 <span className="bg-[#FDFBF7] px-2.5 py-0.5 rounded border border-[#3E332E]/15 font-medium">{book.timePeriod}</span>
                                 {book.archiveMode === 'keep' && book.eloRank !== null && (
-                                  <span className="text-[#7A8D7B] font-medium">Stats Kept (Elo: {book.eloRank})</span>
+                                  <span className="text-[#7A8D7B] font-medium">{`Stats Kept (Elo: ${book.eloRank})`}</span>
                                 )}
                               </div>
                             </div>
-
                             <button
-                              type="button"
                               onClick={() => handleUnarchive(book.id)}
                               className="bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center gap-1.5 cursor-pointer"
                             >
                               <Icon name="rotate-ccw" className="w-3.5 h-3.5" />
-                              <span>{book.archiveMode === 'keep' && book.eloRank !== null ? 'Unarchive' : 'Unarchive'}</span>
+                              <span>{book.archiveMode === 'keep' && book.eloRank !== null ? 'Unarchive & Rerank' : 'Unarchive'}</span>
                             </button>
                           </div>
                         ))}
