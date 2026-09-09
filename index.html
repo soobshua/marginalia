@@ -450,37 +450,33 @@
             );
           }
 
+          const navTabs = [
+            { id: 'stack', label: 'Ranking Stack', icon: 'book-open' },
+            { id: 'progress', label: 'Progress', icon: 'bar-chart-2' },
+            { id: 'profile', label: 'Reader Profile', icon: 'compass' },
+            { id: 'dispatch', label: 'Dispatch Letter', icon: 'send' },
+            { id: 'archive', label: 'Archive', icon: 'archive' },
+          ];
+
           return e('div', { className: "min-h-screen bg-[#FDFBF7] text-[#3E332E] font-serif flex flex-col" },
             // Header
-            e('header', { className: "border-b border-[#3E332E]/15 bg-[#F5F2EB]/85 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between" },
+            e('header', { className: "border-b border-[#3E332E]/15 bg-[#F5F2EB]/85 backdrop-blur sticky top-0 z-50 px-4 sm:px-6 py-4 flex items-center justify-between" },
               e('div', { className: "flex items-center gap-3" },
                 getIcon('feather', { className: "w-6 h-6 text-[#7A8D7B]" }),
                 e('h1', { className: "text-2xl font-semibold tracking-wide text-[#1A110E] font-serif" }, "Marginalia")
               ),
-              e('nav', { className: "hidden md:flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner" },
-                [
-                  { id: 'stack', label: 'Ranking Stack', icon: 'book-open' },
-                  { id: 'progress', label: 'Progress', icon: 'bar-chart-2' },
-                  { id: 'profile', label: 'Reader Profile', icon: 'compass' },
-                  { id: 'dispatch', label: 'Dispatch Letter', icon: 'send' },
-                  { id: 'archive', label: 'Archive', icon: 'archive' },
-                ].map(tab => 
+              // Desktop & Mobile Navigation (Fully unified and responsive)
+              e('nav', { className: "flex items-center gap-1 bg-[#FDFBF7] border border-[#3E332E]/10 p-1 rounded-lg shadow-inner overflow-x-auto max-w-full" },
+                navTabs.map(tab => 
                   e('button', {
                     key: tab.id,
                     onClick: () => setActiveTab(tab.id),
-                    className: "flex items-center gap-2 px-3.5 py-1.5 rounded-md text-sm transition-all cursor-pointer " + (activeTab === tab.id ? 'bg-[#1A110E] text-[#FDFBF7] shadow-sm' : 'text-[#3E332E]/75 hover:text-[#1A110E] hover:bg-[#F5F2EB]')
+                    className: "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-md text-xs sm:text-sm whitespace-nowrap transition-all cursor-pointer " + (activeTab === tab.id ? 'bg-[#1A110E] text-[#FDFBF7] shadow-sm' : 'text-[#3E332E]/75 hover:text-[#1A110E] hover:bg-[#F5F2EB]')
                   },
-                    getIcon(tab.icon),
+                    getIcon(tab.icon, { className: "w-3.5 h-3.5 sm:w-4 sm:h-4" }),
                     e('span', null, tab.label)
                   )
                 )
-              ),
-              e('button', {
-                onClick: () => setActiveTab('archive'),
-                className: "md:hidden text-xs border border-[#3E332E]/30 px-3 py-1.5 rounded hover:bg-[#3E332E] hover:text-[#FDFBF7] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-              },
-                getIcon('archive', { className: "w-3.5 h-3.5" }),
-                e('span', null, "Archive")
               )
             ),
 
@@ -793,9 +789,18 @@
 
               // Tab 5: Archive
               activeTab === 'archive' && e('div', { className: "space-y-8 animate-fadeIn" },
-                e('div', { className: "border-b border-[#3E332E]/15 pb-4" },
-                  e('h2', { className: "text-3xl font-serif text-[#1A110E]" }, "Archived Corpus"),
-                  e('p', { className: "text-sm text-[#3E332E]/70 italic" }, "Books you have chosen to set aside from your active reading stack.")
+                e('div', { className: "border-b border-[#3E332E]/15 pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" },
+                  e('div', null,
+                    e('h2', { className: "text-3xl font-serif text-[#1A110E]" }, "Archived Corpus"),
+                    e('p', { className: "text-sm text-[#3E332E]/70 italic" }, "Books you have chosen to set aside from your active reading stack.")
+                  ),
+                  e('button', {
+                    onClick: () => setActiveTab('stack'),
+                    className: "self-start sm:self-auto bg-[#1A110E] text-[#FDFBF7] px-4 py-2 rounded text-xs tracking-wider uppercase hover:bg-[#7A8D7B] transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  },
+                    getIcon('book-open', { className: "w-3.5 h-3.5" }),
+                    e('span', null, "Return to Stack")
+                  )
                 ),
                 archivedBooks.length === 0 ? e('div', { className: "bg-[#F5F2EB]/50 border border-[#3E332E]/15 rounded-lg p-12 text-center text-[#3E332E]/60" },
                   getIcon('archive', { className: "w-8 h-8 mx-auto mb-2 opacity-50" }),
